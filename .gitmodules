@@ -4,3 +4,6 @@
 [submodule "deps/verilog-axis"]
 	path = deps/verilog-axis
 	url = https://github.com/alexforencich/verilog-axis.git
+[submodule "deps/VHDL-Components"]
+	path = deps/VHDL-Components
+	url = https://github.com/BBN-Q/VHDL-Components.git
