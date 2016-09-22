@@ -65,7 +65,6 @@ end entity;
 
 architecture arch of com5402_wrapper is
 
-signal rst_sync : std_logic;
 signal tcp_rx_data, tcp_tx_data : SLV8xNTCPSTREAMStype;
 
 --sof/eof signal generation
@@ -95,11 +94,6 @@ signal rx_ifg_state : rx_ifg_state_t := IDLE;
 
 begin
 
--- synchronize reset onto clock domain
-reset_synchronizer : entity work.synchronizer
-generic map(RESET_VALUE => '1')
-port map(rst => rst, clk => clk, data_in => '0', data_out => rst_sync);
-
 --don't leave mac_rx_tlast hanging asserted otherwise Comblock gets messed up
 mac_rx_tlast_int <= mac_rx_tlast and mac_rx_tvalid;
 
@@ -113,7 +107,7 @@ mac_rx_ifg : process(clk)
 	variable ifg_counter : natural range 0 to RX_IFG_DELAY := 0;
 begin
 	if rising_edge(clk) then
-		if rst_sync = '1' then
+		if rst = '1' then
 			rx_ifg_state <= IDLE;
 		else
 			case (rx_ifg_state) is
@@ -140,7 +134,7 @@ mac_rx_tready <= mac_rx_tready_int;
 mac_rx_sof_creator : process(clk)
 begin
 	if rising_edge(clk) then
-		if rst_sync = '1' then
+		if rst = '1' then
 			mac_rx_sof_state <= IDLE;
 		else
 			case( mac_rx_sof_state ) is
@@ -162,7 +156,7 @@ mac_rx_sof <= mac_rx_tvalid and mac_rx_tready_int when mac_rx_sof_state = IDLE e
 udp_tx_sof_creator : process(clk)
 begin
 	if rising_edge(clk) then
-		if rst_sync = '1' then
+		if rst = '1' then
 			udp_tx_sof_state <= IDLE;
 			udp_tx_sof <= '0';
 		else
@@ -239,7 +233,7 @@ generic map (
 )
 port map (
 	CLK => clk,
-	SYNC_RESET	=> rst_sync,
+	SYNC_RESET	=> rst,
 
 	MAC_ADDR => mac_addr,
 	REQUESTED_IPv4_ADDR => IPv4_addr,
