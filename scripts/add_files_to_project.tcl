@@ -38,17 +38,26 @@ add_files -norecurse $APS2_COMMS_REPO_PATH/src
 
 # dependecies
 add_files -norecurse $APS2_COMMS_REPO_PATH/deps/VHDL-Components/src/Synchronizer.vhd
+
 add_files -norecurse \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_adapter.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_frame_length_adjust.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_srl_fifo.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_async_fifo.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_frame_fifo.v \
+	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_async_frame_fifo.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_demux_2.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_mux_3.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_arb_mux_3.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/arbiter.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/priority_encoder.v
+
+add_files -norecurse \
+	$APS2_COMMS_REPO_PATH/deps/verilog-ethernet/rtl/eth_mac_1g_fifo.v \
+	$APS2_COMMS_REPO_PATH/deps/verilog-ethernet/rtl/eth_mac_1g.v \
+	$APS2_COMMS_REPO_PATH/deps/verilog-ethernet/rtl/eth_mac_1g_rx.v \
+	$APS2_COMMS_REPO_PATH/deps/verilog-ethernet/rtl/eth_mac_1g_tx.v \
+	$APS2_COMMS_REPO_PATH/deps/verilog-ethernet/rtl/lfsr.v
 
 add_files -norecurse \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/arp_cache2.vhd \
