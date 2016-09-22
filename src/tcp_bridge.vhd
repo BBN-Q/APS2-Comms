@@ -41,41 +41,49 @@ entity tcp_bridge is
 		cpld_tx_tlast	 : in std_logic;
 
 		--AXI DataMover streams
-		MM2S_CMD_tdata : out std_logic_vector( 71 downto 0 );
+		MM2S_CMD_tdata  : out std_logic_vector( 71 downto 0 );
 		MM2S_CMD_tready : in std_logic;
 		MM2S_CMD_tvalid : out std_logic;
 
-		MM2S_tdata : in std_logic_vector( 31 downto 0 );
-		MM2S_tkeep : in std_logic_vector( 3 downto 0 );
-		MM2S_tlast : in std_logic;
-		MM2S_tready : out std_logic;
-		MM2S_tvalid : in std_logic;
+		MM2S_tdata     : in std_logic_vector( 31 downto 0 );
+		MM2S_tkeep     : in std_logic_vector( 3 downto 0 );
+		MM2S_tlast     : in std_logic;
+		MM2S_tready    : out std_logic;
+		MM2S_tvalid    : in std_logic;
 
-		MM2S_STS_tdata : in std_logic_vector( 7 downto 0 );
-		MM2S_STS_tkeep : in std_logic_vector( 0 to 0 );
-		MM2S_STS_tlast : in std_logic;
+		MM2S_STS_tdata  : in std_logic_vector( 7 downto 0 );
+		MM2S_STS_tkeep  : in std_logic_vector( 0 to 0 );
+		MM2S_STS_tlast  : in std_logic;
 		MM2S_STS_tready : out std_logic;
 		MM2S_STS_tvalid : in std_logic;
 
-		S2MM_CMD_tdata : out std_logic_vector( 71 downto 0 );
+		S2MM_CMD_tdata  : out std_logic_vector( 71 downto 0 );
 		S2MM_CMD_tready : in std_logic;
 		S2MM_CMD_tvalid : out std_logic;
 
-		S2MM_tdata : out std_logic_vector( 31 downto 0 );
-		S2MM_tkeep : out std_logic_vector( 3 downto 0 );
-		S2MM_tlast : out std_logic;
+		S2MM_tdata  : out std_logic_vector( 31 downto 0 );
+		S2MM_tkeep  : out std_logic_vector( 3 downto 0 );
+		S2MM_tlast  : out std_logic;
 		S2MM_tready : in std_logic;
 		S2MM_tvalid : out std_logic;
 
-		S2MM_STS_tdata : in std_logic_vector( 7 downto 0 );
-		S2MM_STS_tkeep : in std_logic_vector( 0 to 0 );
-		S2MM_STS_tlast : in std_logic;
+		S2MM_STS_tdata  : in std_logic_vector( 7 downto 0 );
+		S2MM_STS_tkeep  : in std_logic_vector( 0 to 0 );
+		S2MM_STS_tlast  : in std_logic;
 		S2MM_STS_tready : out std_logic;
 		S2MM_STS_tvalid : in std_logic
 	);
 end entity;
 
 architecture arch of tcp_bridge is
+
+
+attribute X_INTERFACE_INFO : string;
+attribute X_INTERFACE_INFO of clk_tcp : signal is "xilinx.com:signal:clock:1.0 clk_tcp CLK";
+attribute X_INTERFACE_PARAMETER : string;
+attribute X_INTERFACE_PARAMETER of clk_tcp : signal is
+	"ASSOCIATED_BUSIF tcp_rx:tcp_tx, ASSOCIATED_RESET rst_tcp, FREQ_HZ 125000000";
+
 
 signal memory_rx_tdata : std_logic_vector(31 downto 0) := (others => '0');
 signal memory_rx_tvalid, memory_rx_tready, memory_rx_tlast : std_logic := '0';

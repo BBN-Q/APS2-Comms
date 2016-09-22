@@ -57,11 +57,17 @@ architecture arch of eth_mac_1g_fifo_wrapper is
 	attribute X_INTERFACE_INFO of gmii_rxd   : signal is "xilinx.com:interface:gmii:1.0 gmii RXD";
 	attribute X_INTERFACE_INFO of gmii_rx_dv : signal is "xilinx.com:interface:gmii:1.0 gmii RX_DV";
 	attribute X_INTERFACE_INFO of gmii_rx_er : signal is "xilinx.com:interface:gmii:1.0 gmii RX_ER";
+	attribute X_INTERFACE_INFO of tx_clk     : signal is "xilinx.com:interface:gmii:1.0 gmii GTX_CLK";
+  attribute X_INTERFACE_INFO of rx_clk     : signal is "xilinx.com:interface:gmii:1.0 gmii RX_CLK";
 
 	attribute X_INTERFACE_PARAMETER : string;
 	attribute X_INTERFACE_PARAMETER of rx_rst    : signal is "POLARITY ACTIVE_HIGH";
 	attribute X_INTERFACE_PARAMETER of tx_rst    : signal is "POLARITY ACTIVE_HIGH";
 	attribute X_INTERFACE_PARAMETER of logic_rst : signal is "POLARITY ACTIVE_HIGH";
+
+	attribute X_INTERFACE_PARAMETER of logic_clk : signal is
+		"ASSOCIATED_BUSIF rx_axis:tx_axis, ASSOCIATED_RESET logic_rst, FREQ_HZ 125000000";
+
 
 	component eth_mac_1g_fifo
 		generic (
