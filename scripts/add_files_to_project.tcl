@@ -3,19 +3,24 @@
 set APS2_COMMS_SCRIPT_PATH [file normalize [info script]]
 set APS2_COMMS_REPO_PATH [file dirname $APS2_COMMS_SCRIPT_PATH]/../
 
+# Rebuild user ip_repo's index with our UserIP before adding any source files
+set_property ip_repo_paths $APS2_COMMS_REPO_PATH/src/ip [current_project]
+update_ip_catalog -rebuild
+
 # create dependency outputs
 set cur_dir [pwd]
-cd $APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl
-exec python axis_mux.py --ports=3
-exec python axis_arb_mux.py --ports=3
-exec python axis_demux.py --ports=2
+cd $APS2_COMMS_REPO_PATH/deps
+file mkdir build
+exec python verilog-axis/rtl/axis_mux.py --ports=3 --output=build/axis_mux_3.v
+exec python verilog-axis/rtl/axis_arb_mux.py --ports=3 --output=build/axis_arb_mux_3.v
+exec python verilog-axis/rtl/axis_demux.py --ports=2 --output=build/axis_demux_2.v
 
 # patch demux because select is keyword in VHDL
-set fp [open axis_demux_2.v r]
+set fp [open build/axis_demux_2.v r]
 set demux [read $fp]
 close $fp
 regsub -all {select} $demux control demux
-set fp [open axis_demux_2.v w]
+set fp [open build/axis_demux_2.v w]
 puts -nonewline $fp $demux
 close $fp
 
@@ -46,11 +51,13 @@ add_files -norecurse \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_async_fifo.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_frame_fifo.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_async_frame_fifo.v \
-	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_demux_2.v \
-	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_mux_3.v \
-	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_arb_mux_3.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/arbiter.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/priority_encoder.v
+
+add_files -norecurse \
+	$APS2_COMMS_REPO_PATH/deps/build/axis_demux_2.v \
+	$APS2_COMMS_REPO_PATH/deps/build/axis_mux_3.v \
+	$APS2_COMMS_REPO_PATH/deps/build/axis_arb_mux_3.v
 
 add_files -norecurse \
 	$APS2_COMMS_REPO_PATH/deps/verilog-ethernet/rtl/eth_mac_1g_fifo.v \
