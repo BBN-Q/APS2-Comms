@@ -80,3 +80,11 @@ add_files -norecurse \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/udp_rx.vhd \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/udp_tx.vhd \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/whois2.vhd
+
+source $APS2_COMMS_REPO_PATH/src/bd/aps2_comms_bd.tcl
+regenerate_bd_layout
+validate_bd_design -quiet
+save_bd_design
+close_bd_design [get_bd_designs aps2_comms_bd]
+generate_target all [get_files aps2_comms_bd.bd] -quiet
+export_ip_user_files -of_objects [get_files aps2_comms_bd.bd] -no_script -force -quiet
