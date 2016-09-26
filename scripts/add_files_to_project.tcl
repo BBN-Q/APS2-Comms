@@ -46,7 +46,6 @@ add_files -norecurse $APS2_COMMS_REPO_PATH/deps/VHDL-Components/src/Synchronizer
 
 add_files -norecurse \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_adapter.v \
-	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_frame_length_adjust.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_srl_fifo.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_async_fifo.v \
 	$APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl/axis_frame_fifo.v \
@@ -70,13 +69,11 @@ add_files -norecurse \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/arp_cache2.vhd \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/arp.vhd \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/bram_dp2.vhd \
-	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/bram_dp.vhd \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/com5402_dhcp.vhd \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/com5402pkg.vhd \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/dhcp_client.vhd \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/igmp_query.vhd \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/igmp_report.vhd \
-	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/lfsr11p.vhd \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/packet_parsing.vhd \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/ping.vhd \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/tcp_rxbufndemux2.vhd \
