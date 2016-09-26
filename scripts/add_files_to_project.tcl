@@ -85,6 +85,9 @@ add_files -norecurse \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/udp_tx.vhd \
 	$APS2_COMMS_REPO_PATH/deps/ComBlock/5402/whois2.vhd
 
+# constraints
+add_files -fileset constrs_1 -norecurse $APS2_COMMS_REPO_PATH/constraints/async_fifos.tcl
+
 source $APS2_COMMS_REPO_PATH/src/bd/aps2_comms_bd.tcl
 regenerate_bd_layout
 validate_bd_design -quiet
