@@ -1,5 +1,9 @@
 -- Simple wrapper of the eth_mac_1g_fifo
 -- with helper attributes for Vivado to infer interfaces
+
+library ieee;
+use ieee.std_logic_1164.all;
+
 entity eth_mac_1g_fifo_wrapper is
 	generic (
 		ENABLE_PADDING     : natural := 1;
