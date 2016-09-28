@@ -1,0 +1,6 @@
+vhdl xpm "/opt/Xilinx/Vivado/2016.1/data/ip/xpm/xpm_VCOMP.vhd" 
+vhdl xil_defaultlib "../../../../src/udp_responder_pkg.vhd" 
+vhdl xil_defaultlib "../../../../src/udp_responder.vhd" 
+vhdl xil_defaultlib "../../../udp_responder_tb.vhd" 
+
+nosort
