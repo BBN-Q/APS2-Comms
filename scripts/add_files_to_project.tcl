@@ -41,7 +41,7 @@ if { $tcl_platform(platform) == "windows"} {
 	set git_cmd git
 }
 # ignore whitespace warnings - seems a little dangerous
-exec -ignorestderr $git_cmd apply --ignore-whitespace --directory=deps/ComBlock/5402 com5402_dhcp.patch
+exec -ignorestderr $git_cmd apply --directory=deps/ComBlock/5402 com5402_dhcp.patch
 cd $cur_dir
 
 

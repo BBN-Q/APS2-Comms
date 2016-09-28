@@ -1,0 +1,1253 @@
+diff --git a/com5402.vhd b/com5402_dhcp.vhd
+index 52d0c03..c5e7920 100644
+--- a/com5402.vhd
++++ b/com5402_dhcp.vhd
+@@ -11,9 +11,9 @@
+ -- Interfaces directly with COM-5401SOFT MAC protocol layer or equivalent.
+ --
+ -- Rev 2 8/21/11 AZ
+--- Change tx strategy. Transmission is triggered when MAC_TX_CTS = '1' without any 
+--- flow control breaks within a frame. Reason: the MAC tx elastic buffer is now 4KB, 
+--- large enough for 2 maximum size frames. 
++-- Change tx strategy. Transmission is triggered when MAC_TX_CTS = '1' without any
++-- flow control breaks within a frame. Reason: the MAC tx elastic buffer is now 4KB,
++-- large enough for 2 maximum size frames.
+ --
+ -- Rev 3 11/10/13 AZ
+ -- Progressively replacing ASYNC_RESET with SYNC_RESET
+@@ -46,7 +46,7 @@
+ -- Transitioning to numeric_std library (incomplete)
+ --
+ -- Rev 11 6/25/16 AZ
+--- Added MAC_TX_RTS output: potentially useful if there is an external transmission arbiter 
++-- Added MAC_TX_RTS output: potentially useful if there is an external transmission arbiter
+ -- (for example in the case of multiple clients)
+ --
+ -- Rev 12 7/15/16 AZ
+@@ -63,42 +63,46 @@ use work.com5402pkg.all;	-- defines global types, number of TCP streams, etc
+ library UNISIM;
+ use UNISIM.VComponents.all;
+ 
+-entity COM5402 is
++entity COM5402_DHCP is
+ 	generic (
+ 		NUDPTX: integer range 0 to 1:= 1;
+ 		NUDPRX: integer range 0 to 1:= 1;
+ 			-- number of UDP ports enabled for tx and rx
+ 		IGMP_EN: std_logic := '1';
+ 			-- '1' to enable UDP multicast (which requires IGMP)
+-		NTCPSTREAMS: integer range 0 to 255 := 1;  
++		NTCPSTREAMS: integer range 0 to 255 := 1;
+ 			-- number of concurrent TCP streams handled by this component
+ 		CLK_FREQUENCY: integer := 120;
+ 			-- CLK frequency in MHz. Needed to compute actual delays.
+-		TX_IDLE_TIMEOUT: integer range 0 to 50:= 50;	
+-			-- inactive input timeout, expressed in 4us units. -- 50*4us = 200us 
++		TX_IDLE_TIMEOUT: integer range 0 to 50:= 50;
++			-- inactive input timeout, expressed in 4us units. -- 50*4us = 200us
+ 			-- Controls the transmit stream segmentation: data in the elastic buffer will be transmitted if
+ 			-- no input is received within TX_IDLE_TIMEOUT, without waiting for the transmit frame to be filled with MSS data bytes.
+-		SIMULATION: std_logic := '0'
++		SIMULATION: std_logic := '0';
+ 			-- 1 during simulation with Wireshark .cap file, '0' otherwise
+ 			-- Wireshark many not be able to collect offloaded checksum computations.
+ 			-- when SIMULATION =  '1': (a) IP header checksum is valid if 0000,
+ 			-- (b) TCP checksum computation is forced to a valid 00001 irrespective of the 16-bit checksum
+ 			-- captured by Wireshark.
++		WITH_DHCP_CLIENT: boolean := true;
++			-- instantiate a DHCP client
++		FIXED_IP : boolean := false
++			--lock down the IP address to 192.168.2.123
+ 	);
+-    Port ( 
++    Port (
+ 		--//-- CLK, RESET
+ 		CLK: in std_logic;
+ 			-- All signals are synchronous with CLK
+ 			-- CLK must be a global clock 125 MHz or faster to match the Gbps MAC speed.
+ 		SYNC_RESET: in std_logic;
+-		
++
+ 		--//-- CONFIGURATION
+ 		-- configuration signals are synchonous with CLK
+ 		-- Synchronous with CLK clock.
+ 		MAC_ADDR : IN std_logic_vector(47 downto 0);
+-		IPv4_ADDR: in std_logic_vector(31 downto 0);
++		REQUESTED_IPv4_ADDR: in std_logic_vector(31 downto 0);
+ 		IPv6_ADDR: in std_logic_vector(127 downto 0);
+-		MULTICAST_IP_ADDR: in std_logic_vector(31 downto 0); 
++		MULTICAST_IP_ADDR: in std_logic_vector(31 downto 0);
+ 		    -- to receive UDP multicast messages. One multicast address only
+             -- 0.0.0.0 to signify that IP multicasting is not supported here.
+ 		SUBNET_MASK: in std_logic_vector(31 downto 0);
+@@ -106,6 +110,7 @@ entity COM5402 is
+ 			-- local IP address. 4 bytes for IPv4, 16 bytes for IPv6
+ 			-- Natural order (MSB) 172.16.1.128 (LSB) as transmitted in the IP frame.
+ 
++
+ 		--// User-initiated connection reset for stream I
+ 		CONNECTION_RESET: in std_logic_vector((NTCPSTREAMS-1) downto 0);
+ 
+@@ -117,16 +122,16 @@ entity COM5402 is
+ 		MAC_TX_DATA_VALID: out std_logic;
+ 			-- data valid
+ 		MAC_TX_SOF: out std_logic;
+-			-- start of frame: '1' when sending the first byte. 
++			-- start of frame: '1' when sending the first byte.
+ 			-- Aligned with MAC_TX_DATA_VALID
+ 		MAC_TX_EOF: out std_logic;
+-			-- End of frame: '1' when sending the last byte in a packet to be transmitted. 
++			-- End of frame: '1' when sending the last byte in a packet to be transmitted.
+ 			-- Aligned with MAC_TX_DATA_VALID
+ 		MAC_TX_CTS: in std_logic;
+-			-- MAC-generated Clear To Send flow control signal, indicating room in the 
+-			-- MAC tx elastic buffer for a complete maximum size frame 1518B. 
++			-- MAC-generated Clear To Send flow control signal, indicating room in the
++			-- MAC tx elastic buffer for a complete maximum size frame 1518B.
+ 			-- The user should check that this signal is high before deciding to send
+-			-- sending the next frame. 
++			-- sending the next frame.
+ 			-- Note: MAC_TX_CTS may go low while the frame is transfered in. Ignore it as space is guaranteed
+ 			-- at the start of frame.
+ 		MAC_TX_RTS: out std_logic;
+@@ -143,17 +148,22 @@ entity COM5402 is
+ 			-- data valid
+ 			-- ALWAYS ON FROM SOF TO EOF (i.e. no gaps)
+ 		MAC_RX_SOF: in std_logic;
+-			-- '1' when sending the first byte in a received packet. 
++			-- '1' when sending the first byte in a received packet.
+ 			-- Aligned with MAC_RX_DATA_VALID
+ 		MAC_RX_EOF: in std_logic;
+-			-- '1' when sending the last byte in a received packet. 
++			-- '1' when sending the last byte in a received packet.
+ 			-- Aligned with MAC_RX_DATA_VALID
+ 
++		--//-- Application <- IP rx
++		--mod by CAR and BD
++		UDP_RX_SRC_PORT_NO : out std_logic_vector(15 downto 0);
++		RX_SRC_IP_ADDR : out std_logic_vector(31 downto 0);
++
+ 		--//-- Application <- UDP rx
+ 		UDP_RX_DATA: out std_logic_vector(7 downto 0);
+ 		UDP_RX_DATA_VALID: out std_logic;
+-		UDP_RX_SOF: out std_logic;	
+-		UDP_RX_EOF: out std_logic;	
++		UDP_RX_SOF: out std_logic;
++		UDP_RX_EOF: out std_logic;
+ 			-- 1 CLK pulse indicating that UDP_RX_DATA is the last byte in the UDP data field.
+ 			-- ALWAYS CHECK UDP_RX_DATA_VALID at the end of packet (UDP_RX_EOF = '1') to confirm
+ 			-- that the UDP packet is valid. External buffer may have to backtrack to the the last
+@@ -164,14 +174,14 @@ entity COM5402 is
+ 			-- check the destination port number matches UDP_RX_DEST_PORT_NO (1) or ignore it (0)
+ 			-- The latter case is useful when this component is shared among multiple UDP ports
+ 		UDP_RX_DEST_PORT_NO_OUT: out std_logic_vector(15 downto 0);
+-			-- Collected destination UDP port in received UDP frame. Read when APP_EOF = '1' 
+-				
++			-- Collected destination UDP port in received UDP frame. Read when APP_EOF = '1'
++
+ 		--//-- Application -> UDP tx
+ 		UDP_TX_DATA: in std_logic_vector(7 downto 0);
+ 		UDP_TX_DATA_VALID: in std_logic;
+ 		UDP_TX_SOF: in std_logic;	-- 1 CLK-wide pulse to mark the first byte in the tx UDP frame
+ 		UDP_TX_EOF: in std_logic;	-- 1 CLK-wide pulse to mark the last byte in the tx UDP frame
+-		UDP_TX_CTS: out std_logic;	
++		UDP_TX_CTS: out std_logic;
+ 		UDP_TX_ACK: out std_logic;	-- 1 CLK-wide pulse indicating that the previous UDP frame is being sent
+ 		UDP_TX_NAK: out std_logic;	-- 1 CLK-wide pulse indicating that the previous UDP frame could not be sent
+ 		UDP_TX_DEST_IP_ADDR: in std_logic_vector(127 downto 0);
+@@ -179,22 +189,28 @@ entity COM5402 is
+ 		UDP_TX_SOURCE_PORT_NO: in std_logic_vector(15 downto 0);
+ 			-- the IP and port information is latched in at the UDP_TX_SOF pulse.
+ 			-- USAGE: wait until the previous UDP tx frame UDP_TX_ACK or UDP_TX_NAK to send the follow-on UDP tx frame
+-		
++
++		--mod by CAR
++		TCP_PORT_NO : in 	std_logic_vector(15 downto 0);
++
+ 		--//-- Application <- TCP rx
+ 		-- NTCPSTREAMS can operate independently and concurrently. No scheduling arbitration needed here.
+ 		TCP_RX_DATA: out SLV8xNTCPSTREAMStype;
+ 		TCP_RX_DATA_VALID: out std_logic_vector((NTCPSTREAMS-1) downto 0);
+ 		TCP_RX_RTS: out std_logic_vector((NTCPSTREAMS-1) downto 0);	-- Ready To Send
+ 		TCP_RX_CTS: in std_logic_vector((NTCPSTREAMS-1) downto 0);	-- Clear To Send
+-		
++
+ 		--//-- Application -> TCP tx
+ 		-- NTCPSTREAMS can operate independently and concurrently. No scheduling arbitration needed here.
+ 		TCP_TX_DATA: in SLV8xNTCPSTREAMStype;
+ 		TCP_TX_DATA_VALID: in std_logic_vector((NTCPSTREAMS-1) downto 0);
+-		TCP_TX_CTS: out std_logic_vector((NTCPSTREAMS-1) downto 0);	
+-			-- Clear To Send = transmit flow control. 
++		TCP_TX_CTS: out std_logic_vector((NTCPSTREAMS-1) downto 0);
++			-- Clear To Send = transmit flow control.
+ 			-- App is responsible for checking the CTS signal before sending APP_DATA
+ 
++		--//-- DHCP
++		DYNAMIC_IP : in std_logic; -- 1 to enable DHCP client
++
+ 		--//-- TEST POINTS, COMSCOPE TRACES
+ 		TCP_CONNECTED_FLAG: out std_logic_vector((NTCPSTREAMS-1) downto 0);
+ 		CS1: out std_logic_vector(7 downto 0);
+@@ -202,20 +218,20 @@ entity COM5402 is
+ 		CS2: out std_logic_vector(7 downto 0);
+ 		CS2_CLK: out std_logic;
+ 		TP: out std_logic_vector(10 downto 1)
+-	   
++
+  );
+ end entity;
+ 
+-architecture Behavioral of COM5402 is
++architecture Behavioral of COM5402_DHCP is
+ --------------------------------------------------------
+ --      COMPONENTS
+ --------------------------------------------------------
+ 	COMPONENT TIMER_4US
+ 	GENERIC (
+-		CLK_FREQUENCY: integer 
++		CLK_FREQUENCY: integer
+ 	);
+ 	PORT(
+-		CLK : IN std_logic;          
++		CLK : IN std_logic;
+ 		SYNC_RESET : IN std_logic;
+ 		TICK_4US : OUT std_logic;
+ 		TICK_100MS: out std_logic
+@@ -226,7 +242,7 @@ architecture Behavioral of COM5402 is
+ 	GENERIC (
+ 		IPv6_ENABLED: std_logic;
+ 		SIMULATION: std_logic
+-	);	
++	);
+ 	PORT(
+ 		CLK : IN std_logic;
+ 		SYNC_RESET : IN std_logic;
+@@ -238,11 +254,11 @@ architecture Behavioral of COM5402 is
+ 		IPv4_ADDR: in std_logic_vector(31 downto 0);
+ 		IPv6_ADDR: in std_logic_vector(127 downto 0);
+ 		IP_RX_DATA: out std_logic_vector(7 downto 0);
+-		IP_RX_DATA_VALID: out std_logic;	
+-		IP_RX_DATA_VALID2: out std_logic;	
++		IP_RX_DATA_VALID: out std_logic;
++		IP_RX_DATA_VALID2: out std_logic;
+ 		IP_RX_SOF: out std_logic;
+ 		IP_RX_EOF: out std_logic;
+-		IP_BYTE_COUNT: out std_logic_vector(15 downto 0);	
++		IP_BYTE_COUNT: out std_logic_vector(15 downto 0);
+ 		IP_HEADER_FLAG: out std_logic;
+ 		RX_TYPE : OUT std_logic_vector(3 downto 0);
+ 		RX_TYPE_RDY : OUT std_logic;
+@@ -266,7 +282,7 @@ architecture Behavioral of COM5402 is
+ 		RX_TCP_SEQ_NO: out std_logic_vector(31 downto 0);
+ 		RX_TCP_ACK_NO: out std_logic_vector(31 downto 0);
+ 		RX_TCP_WINDOW_SIZE: out std_logic_vector(15 downto 0);
+-		
++
+ 		CS1 : OUT std_logic_vector(7 downto 0);
+ 		CS1_CLK : OUT std_logic;
+ 		CS2 : OUT std_logic_vector(7 downto 0);
+@@ -279,7 +295,7 @@ architecture Behavioral of COM5402 is
+ 	GENERIC (
+ 		IPv6_ENABLED: std_logic;
+ 		MAX_PING_SIZE: std_logic_vector(15 downto 0)
+-	);	
++	);
+ 	PORT(
+ 		CLK : IN std_logic;
+ 		SYNC_RESET : IN std_logic;
+@@ -293,9 +309,9 @@ architecture Behavioral of COM5402 is
+ 		RX_IPv4_6n: in std_logic;
+ 		RX_IP_PROTOCOL : IN std_logic_vector(7 downto 0);
+ 		RX_IP_PROTOCOL_RDY : IN std_logic;
+-		IP_RX_DATA_VALID: in std_logic;	
++		IP_RX_DATA_VALID: in std_logic;
+ 		IP_RX_EOF : IN std_logic;
+-		MAC_TX_CTS : IN std_logic;          
++		MAC_TX_CTS : IN std_logic;
+ 		MAC_TX_DATA : OUT std_logic_vector(7 downto 0);
+ 		MAC_TX_DATA_VALID : OUT std_logic;
+ 		MAC_TX_EOF : OUT std_logic;
+@@ -318,7 +334,7 @@ architecture Behavioral of COM5402 is
+ 		RX_TYPE_RDY : IN std_logic;
+ 		RX_SOURCE_MAC_ADDR: in std_logic_vector(47 downto 0);
+ 		RX_SOURCE_IP_ADDR: in std_logic_vector(31 downto 0);
+-		MAC_TX_CTS : IN std_logic;          
++		MAC_TX_CTS : IN std_logic;
+ 		MAC_TX_DATA : OUT std_logic_vector(7 downto 0);
+ 		MAC_TX_DATA_VALID : OUT std_logic;
+ 		MAC_TX_EOF : OUT std_logic;
+@@ -335,7 +351,7 @@ architecture Behavioral of COM5402 is
+ 		WHOIS_START : IN std_logic;
+ 		MAC_ADDR : IN std_logic_vector(47 downto 0);
+ 		IPv4_ADDR : IN std_logic_vector(31 downto 0);
+-		MAC_TX_CTS : IN std_logic;          
++		MAC_TX_CTS : IN std_logic;
+ 		WHOIS_RDY : OUT std_logic;
+ 		MAC_TX_DATA : OUT std_logic_vector(7 downto 0);
+ 		MAC_TX_DATA_VALID : OUT std_logic;
+@@ -349,10 +365,10 @@ architecture Behavioral of COM5402 is
+ 	PORT(
+ 		SYNC_RESET: in std_logic;
+ 		CLK : IN std_logic;
+-		TICK_100MS : IN std_logic;          
++		TICK_100MS : IN std_logic;
+ 		RT_IP_ADDR : IN std_logic_vector(31 downto 0);
+ 		RT_REQ_RTS : IN std_logic;
+-		RT_CTS: out std_logic;	
++		RT_CTS: out std_logic;
+ 		RT_MAC_REPLY : OUT std_logic_vector(47 downto 0);
+ 		RT_MAC_RDY : OUT std_logic;
+ 		RT_NAK: out std_logic;
+@@ -361,8 +377,8 @@ architecture Behavioral of COM5402 is
+ 		SUBNET_MASK : IN std_logic_vector(31 downto 0);
+ 		GATEWAY_IP_ADDR: in std_logic_vector(31 downto 0);
+ 		RX_SOURCE_ADDR_RDY: in std_logic;
+-		RX_SOURCE_MAC_ADDR: in std_logic_vector(47 downto 0);	
+-		RX_SOURCE_IP_ADDR: in std_logic_vector(31 downto 0); 
++		RX_SOURCE_MAC_ADDR: in std_logic_vector(47 downto 0);
++		RX_SOURCE_IP_ADDR: in std_logic_vector(31 downto 0);
+ 		WHOIS_IP_ADDR : OUT std_logic_vector(31 downto 0);
+ 		WHOIS_START : OUT std_logic;
+ 		SREG1 : OUT std_logic_vector(7 downto 0);
+@@ -387,7 +403,7 @@ architecture Behavioral of COM5402 is
+ 		IP_BYTE_COUNT : IN std_logic_vector(15 downto 0);
+ 		IP_HEADER_FLAG : IN std_logic;
+ 		RX_IP_PROTOCOL : IN std_logic_vector(7 downto 0);
+-		RX_IP_PROTOCOL_RDY : IN std_logic;          
++		RX_IP_PROTOCOL_RDY : IN std_logic;
+ 		RX_DEST_IP_ADDR: in std_logic_vector(31 downto 0);
+ 		TRIGGER_RESPONSE : OUT std_logic;
+ 		TP : OUT std_logic_vector(10 downto 1)
+@@ -403,7 +419,7 @@ architecture Behavioral of COM5402 is
+ 		MAC_ADDR : IN std_logic_vector(47 downto 0);
+ 		IPv4_ADDR : IN std_logic_vector(31 downto 0);
+ 		IP_ID : IN std_logic_vector(15 downto 0);
+-		MAC_TX_CTS : IN std_logic;          
++		MAC_TX_CTS : IN std_logic;
+ 		MAC_TX_DATA : OUT std_logic_vector(7 downto 0);
+ 		MAC_TX_DATA_VALID : OUT std_logic;
+ 		MAX_TX_EOF : OUT std_logic;
+@@ -412,25 +428,26 @@ architecture Behavioral of COM5402 is
+ 		);
+ 	END COMPONENT;
+ 
+-	COMPONENT UDP2SERIAL
+-	GENERIC (
+-		PORT_NO: std_logic_vector(15 downto 0);
+-		CLK_FREQUENCY: integer
+-	);	
+-	PORT(
+-		CLK : IN std_logic;
+-		SYNC_RESET : IN std_logic;
+-		IP_RX_DATA : IN std_logic_vector(7 downto 0);
+-		IP_RX_DATA_VALID : IN std_logic;
+-		IP_RX_SOF : IN std_logic;
+-		IP_RX_EOF : IN std_logic;
+-		IP_HEADER_FLAG : IN std_logic;
+-		RX_IP_PROTOCOL : IN std_logic_vector(7 downto 0);
+-		RX_IP_PROTOCOL_RDY : IN std_logic;
+-		SERIAL_OUT : OUT std_logic;
+-		TP : OUT std_logic_vector(10 downto 1)
+-		);
+-	END COMPONENT;
++	-- commented out by CAR to avoid unecssary dependency
++	-- COMPONENT UDP2SERIAL
++	-- GENERIC (
++	-- 	PORT_NO: std_logic_vector(15 downto 0);
++	-- 	CLK_FREQUENCY: integer
++	-- );
++	-- PORT(
++	-- 	CLK : IN std_logic;
++	-- 	SYNC_RESET : IN std_logic;
++	-- 	IP_RX_DATA : IN std_logic_vector(7 downto 0);
++	-- 	IP_RX_DATA_VALID : IN std_logic;
++	-- 	IP_RX_SOF : IN std_logic;
++	-- 	IP_RX_EOF : IN std_logic;
++	-- 	IP_HEADER_FLAG : IN std_logic;
++	-- 	RX_IP_PROTOCOL : IN std_logic_vector(7 downto 0);
++	-- 	RX_IP_PROTOCOL_RDY : IN std_logic;
++	-- 	SERIAL_OUT : OUT std_logic;
++	-- 	TP : OUT std_logic_vector(10 downto 1)
++	-- 	);
++	-- END COMPONENT;
+ 
+ 	COMPONENT UDP_RX
+ 	PORT(
+@@ -440,10 +457,10 @@ architecture Behavioral of COM5402 is
+ 		IP_RX_DATA_VALID : IN std_logic;
+ 		IP_RX_SOF : IN std_logic;
+ 		IP_RX_EOF : IN std_logic;
+-		IP_BYTE_COUNT: in std_logic_vector(15 downto 0);	
++		IP_BYTE_COUNT: in std_logic_vector(15 downto 0);
+ 		IP_HEADER_FLAG : IN std_logic;
+ 		RX_IP_PROTOCOL : IN std_logic_vector(7 downto 0);
+-		RX_IP_PROTOCOL_RDY : IN std_logic;          
++		RX_IP_PROTOCOL_RDY : IN std_logic;
+ 		RX_UDP_CKSUM: in std_logic_vector(16 downto 0);
+ 		RX_UDP_CKSUM_RDY: in std_logic;
+ 		PORT_NO: in std_logic_vector(15 downto 0);
+@@ -452,7 +469,7 @@ architecture Behavioral of COM5402 is
+ 		APP_DATA_VALID : OUT std_logic;
+ 		APP_SOF : OUT std_logic;
+ 		APP_EOF : OUT std_logic;
+-		APP_SRC_UDP_PORT: OUT std_logic_vector(15 downto 0);			
++		APP_SRC_UDP_PORT: OUT std_logic_vector(15 downto 0);
+ 		APP_DEST_UDP_PORT: out std_logic_vector(15 downto 0);
+ 		TP : OUT std_logic_vector(10 downto 1)
+ 		);
+@@ -472,7 +489,7 @@ architecture Behavioral of COM5402 is
+ 		APP_SOF : IN std_logic;
+ 		APP_EOF : IN std_logic;
+ 		APP_CTS : OUT std_logic;
+-		DEST_IP_ADDR: in std_logic_vector(127 downto 0);	
++		DEST_IP_ADDR: in std_logic_vector(127 downto 0);
+ 		DEST_PORT_NO : IN std_logic_vector(15 downto 0);
+ 		SOURCE_PORT_NO : IN std_logic_vector(15 downto 0);
+ 		IPv4_6n: in std_logic;
+@@ -491,7 +508,7 @@ architecture Behavioral of COM5402 is
+ 		MAC_TX_DATA : OUT std_logic_vector(7 downto 0);
+ 		MAC_TX_DATA_VALID : OUT std_logic;
+ 		MAC_TX_EOF : OUT std_logic;
+-		MAC_TX_CTS : IN std_logic;          
++		MAC_TX_CTS : IN std_logic;
+ 		RTS: out std_logic := '0';
+ 		TP : OUT std_logic_vector(10 downto 1)
+ 		);
+@@ -499,11 +516,11 @@ architecture Behavioral of COM5402 is
+ 
+ 	COMPONENT TCP_SERVER
+ 	GENERIC (
+-		NTCPSTREAMS: integer;  
++		NTCPSTREAMS: integer;
+ 		MSS: std_logic_vector(15 downto 0);
+ 		IPv6_ENABLED: std_logic;
+ 		SIMULATION: std_logic
+-	);	
++	);
+ 	PORT(
+ 		CLK : IN std_logic;
+ 		SYNC_RESET: in std_logic;
+@@ -513,10 +530,10 @@ architecture Behavioral of COM5402 is
+ 		TCP_LOCAL_PORTS: in SLV16xNTCPSTREAMStype;
+ 		CONNECTION_RESET: in std_logic_vector((NTCPSTREAMS-1) downto 0);
+ 		IP_RX_DATA: in std_logic_vector(7 downto 0);
+-		IP_RX_DATA_VALID: in std_logic;	
++		IP_RX_DATA_VALID: in std_logic;
+ 		IP_RX_SOF: in std_logic;
+ 		IP_RX_EOF: in std_logic;
+-		IP_BYTE_COUNT: in std_logic_vector(15 downto 0);	
++		IP_BYTE_COUNT: in std_logic_vector(15 downto 0);
+ 		IP_HEADER_FLAG: in std_logic;
+ 		RX_IPv4_6n: in std_logic;
+ 		RX_IP_PROTOCOL: in std_logic_vector(7 downto 0);
+@@ -537,7 +554,7 @@ architecture Behavioral of COM5402 is
+ 		RX_STREAM_NO: out integer range 0 to (NTCPSTREAMS-1);
+ 		RX_EOF: out std_logic;
+ 		RX_FREE_SPACE: in SLV16xNTCPSTREAMStype;
+-		TX_PACKET_SEQUENCE_START_OUT: out std_logic;	
++		TX_PACKET_SEQUENCE_START_OUT: out std_logic;
+ 		TX_DEST_MAC_ADDR_OUT: out std_logic_vector(47 downto 0);
+ 		TX_DEST_IP_ADDR_OUT: out std_logic_vector(127 downto 0);
+ 		TX_DEST_PORT_NO_OUT: out std_logic_vector(15 downto 0);
+@@ -547,7 +564,7 @@ architecture Behavioral of COM5402 is
+ 		TX_ACK_NO_OUT: out std_logic_vector(31 downto 0);
+ 		TX_ACK_WINDOW_LENGTH_OUT: out std_logic_vector(15 downto 0);
+ 		TX_FLAGS_OUT: out std_logic_vector(7 downto 0);
+-		TX_PACKET_TYPE_OUT : out std_logic_vector(1 downto 0); 
++		TX_PACKET_TYPE_OUT : out std_logic_vector(1 downto 0);
+ 		MAC_TX_EOF: in std_logic;	-- need to know when packet tx is complete
+ 		RTS: out std_logic := '0';
+ 		EFF_RX_WINDOW_SIZE_PARTIAL: out std_logic_vector(16 downto 0);
+@@ -556,35 +573,35 @@ architecture Behavioral of COM5402 is
+ 		TX_SEQ_NO: out SLV17xNTCPSTREAMStype;
+ 		RX_TCP_ACK_NO_D: out SLV17xNTCPSTREAMStype;
+ 		CONNECTED_FLAG: out std_logic_vector((NTCPSTREAMS-1) downto 0);
+-		TX_STREAM_SEL: in integer range 0 to (NTCPSTREAMS-1) := 0;	
++		TX_STREAM_SEL: in integer range 0 to (NTCPSTREAMS-1) := 0;
+ 		TX_PAYLOAD_RTS: in std_logic;
+ 		TX_PAYLOAD_SIZE: in std_logic_vector(10 downto 0);
+ 		TP: out std_logic_vector(10 downto 1)
+ 		);
+ 	END COMPONENT;
+-	
++
+ COMPONENT TCP_TXBUF is
+ 	generic (
+-		NTCPSTREAMS: integer;  
++		NTCPSTREAMS: integer;
+ 		NBUFS: integer;
+-		TX_IDLE_TIMEOUT: integer range 0 to 50;	
++		TX_IDLE_TIMEOUT: integer range 0 to 50;
+ 		MSS: std_logic_vector(15 downto 0)
+ 	);
+-    Port ( 
++    Port (
+ 		--//-- CLK, RESET
+-		CLK: in std_logic;		
++		CLK: in std_logic;
+ 		SYNC_RESET: in std_logic;
+ 		TICK_4US: in std_logic;
+ 		APP_DATA: in SLV8xNTCPSTREAMStype;
+ 		APP_DATA_VALID: in std_logic_vector((NTCPSTREAMS-1) downto 0);
+-		APP_CTS: out std_logic_vector((NTCPSTREAMS-1) downto 0);	
++		APP_CTS: out std_logic_vector((NTCPSTREAMS-1) downto 0);
+ 		EFF_RX_WINDOW_SIZE_PARTIAL_IN: in std_logic_vector(16 downto 0);
+ 		EFF_RX_WINDOW_SIZE_PARTIAL_STREAM: in integer range 0 to (NTCPSTREAMS-1) := 0;
+ 		EFF_RX_WINDOW_SIZE_PARTIAL_VALID: in std_logic; -- 1 CLK-wide pulse to indicate that the above information is valid
+ 		TX_SEQ_NO_IN: in SLV17xNTCPSTREAMStype;
+ 		RX_TCP_ACK_NO_D: in SLV17xNTCPSTREAMStype;
+ 		CONNECTED_FLAG: in std_logic_vector((NTCPSTREAMS-1) downto 0);
+-		TX_STREAM_SEL: out integer range 0 to (NTCPSTREAMS-1) := 0;	
++		TX_STREAM_SEL: out integer range 0 to (NTCPSTREAMS-1) := 0;
+ 		TX_PAYLOAD_RTS: out std_logic;
+ 		TX_PAYLOAD_CHECKSUM: out std_logic_vector(16 downto 0);
+ 		TX_PAYLOAD_SIZE: out std_logic_vector(10 downto 0);
+@@ -596,13 +613,13 @@ COMPONENT TCP_TXBUF is
+ 
+ 			);
+ end COMPONENT;
+-	
++
+ 
+ 	COMPONENT TCP_TX
+ 	GENERIC (
+-		MSS: std_logic_vector(15 downto 0);	
++		MSS: std_logic_vector(15 downto 0);
+ 		IPv6_ENABLED: std_logic
+-	);	
++	);
+ 	PORT(
+ 		CLK : IN std_logic;
+ 		SYNC_RESET: in std_logic;
+@@ -627,20 +644,20 @@ end COMPONENT;
+ 		TX_PAYLOAD_CTS : OUT std_logic;
+ 		TX_PAYLOAD_SIZE : IN std_logic_vector(10 downto 0);
+ 		TX_PAYLOAD_CHECKSUM: in std_logic_vector(16 downto 0);
+-		MAC_TX_CTS : IN std_logic;          
++		MAC_TX_CTS : IN std_logic;
+ 		MAC_TX_DATA : OUT std_logic_vector(7 downto 0);
+ 		MAC_TX_DATA_VALID : OUT std_logic;
+ 		MAC_TX_EOF : OUT std_logic;
+ 		TP : OUT std_logic_vector(10 downto 1)
+ 		);
+ 	END COMPONENT;
+-	
++
+ 
+ 	COMPONENT TCP_RXBUFNDEMUX2
+ 	GENERIC (
+-		NTCPSTREAMS: integer;  
++		NTCPSTREAMS: integer;
+ 		NBUFS: integer
+-	);	
++	);
+ 	PORT(
+ 		SYNC_RESET : IN std_logic;
+ 		CLK : IN std_logic;
+@@ -660,11 +677,50 @@ end COMPONENT;
+ 		);
+ 	END COMPONENT;
+ 
++	-- Added 1/12/15 by BCD to enable DHCP client
++	COMPONENT DHCP_CLIENT
++	GENERIC (
++		SIMULATION: std_logic
++	);
++	PORT(
++		SYNC_RESET : IN std_logic;
++		CLK : IN std_logic;
++		TICK_4US : IN std_logic;
++		TICK_100MS : IN std_logic;
++		MAC_ADDR : IN std_logic_vector(47 downto 0);
++		LAST_IPv4_ADDR : IN std_logic_vector(31 downto 0);
++		IP_ID_IN : IN std_logic_vector(15 downto 0);
++		IP_RX_DATA : IN std_logic_vector(7 downto 0);
++		IP_RX_DATA_VALID : IN std_logic;
++		IP_RX_SOF : IN std_logic;
++		IP_RX_EOF : IN std_logic;
++		IP_BYTE_COUNT : IN std_logic_vector(15 downto 0);
++		IP_HEADER_FLAG : IN std_logic;
++		RX_IP_PROTOCOL : IN std_logic_vector(7 downto 0);
++		RX_IP_PROTOCOL_RDY : IN std_logic;
++		RX_SOURCE_IP_ADDR : IN std_logic_vector(31 downto 0);
++		RX_UDP_CKSUM : IN std_logic_vector(16 downto 0);
++		RX_UDP_CKSUM_RDY : IN std_logic;
++		MAC_TX_CTS : IN std_logic;
++		IPv4_ADDR : OUT std_logic_vector(31 downto 0);
++		LEASE_TIME : OUT std_logic_vector(31 downto 0);
++		SUBNET_MASK : OUT std_logic_vector(31 downto 0);
++		ROUTER : OUT std_logic_vector(31 downto 0);
++		DNS1 : OUT std_logic_vector(31 downto 0);
++		DNS2 : OUT std_logic_vector(31 downto 0);
++		MAC_TX_DATA : OUT std_logic_vector(7 downto 0);
++		MAC_TX_DATA_VALID : OUT std_logic;
++		MAC_TX_EOF : OUT std_logic;
++		RTS : OUT std_logic;
++		TP : OUT std_logic_vector(10 downto 1)
++		);
++	END COMPONENT;
++
+ 
+ --------------------------------------------------------
+ --     SIGNALS
+ --------------------------------------------------------
+--- NOTATIONS: 
++-- NOTATIONS:
+ -- _E as one-CLK early sample
+ -- _D as one-CLK delayed sample
+ -- _D2 as two-CLKs delayed sample
+@@ -673,8 +729,8 @@ end COMPONENT;
+ signal TICK_4US: std_logic := '0';
+ signal TICK_100MS_rt: std_logic := '0';
+ signal TICK_100MS: std_logic := '0';
+-signal TICK_CNTR: std_logic_vector(6 downto 0) := (others => '0');       
+-signal TICK_CNTR2: std_logic_vector(9 downto 0) := (others => '0');       
++signal TICK_CNTR: std_logic_vector(6 downto 0) := (others => '0');
++signal TICK_CNTR2: std_logic_vector(9 downto 0) := (others => '0');
+ 
+ --//-- MAC INTERFACE --------------
+ signal MAC_TX_DATA_VALID_local : std_logic  := '0';
+@@ -790,7 +846,7 @@ signal TCP001_RTS: std_logic := '0';
+ signal TCP001_RX_DATA: std_logic_vector(7 downto 0) := x"00";
+ signal TCP001_RX_DATA_VALID: std_logic := '0';
+ signal TCP001_RX_SOF: std_logic := '0';
+-signal TCP001_RX_STREAM_NO: integer range 0 to (NTCPSTREAMS-1);	
++signal TCP001_RX_STREAM_NO: integer range 0 to (NTCPSTREAMS-1);
+ signal TCP001_RX_EOF: std_logic := '0';
+ signal TCP001_RX_FREE_SPACE: SLV16xNTCPSTREAMStype;
+ signal TCP001_TX_PACKET_SEQUENCE_START: std_logic  := '0';
+@@ -816,8 +872,8 @@ signal TCP001_TX_PAYLOAD_RTS: std_logic := '0';
+ signal TCP001_TX_PAYLOAD_CTS: std_logic := '0';
+ signal TCP001_TX_PAYLOAD_SIZE: std_logic_vector(10 downto 0) := (others => '0');
+ signal TCP001_TX_PAYLOAD_CHECKSUM: std_logic_vector(16 downto 0) := "0" & x"0000";
+-signal TCP001_TX_STREAM_SEL: integer range 0 to (NTCPSTREAMS-1);	
+-signal TCP001_TCP_TX_CTS: std_logic_vector((NTCPSTREAMS-1) downto 0) := (others => '0');	
++signal TCP001_TX_STREAM_SEL: integer range 0 to (NTCPSTREAMS-1);
++signal TCP001_TCP_TX_CTS: std_logic_vector((NTCPSTREAMS-1) downto 0) := (others => '0');
+ signal TP_TCP_SERVER: std_logic_vector(10 downto 1);
+ signal TP_TCP_TXBUF: std_logic_vector(10 downto 1);
+ 
+@@ -857,8 +913,8 @@ signal TP_TCP_TXBUF: std_logic_vector(10 downto 1);
+ --signal TCP002_TX_PAYLOAD_CTS: std_logic := '0';
+ --signal TCP002_TX_PAYLOAD_SIZE: std_logic_vector(10 downto 0) := (others => '0');
+ --signal TCP002_TX_PAYLOAD_CHECKSUM: std_logic_vector(16 downto 0) := "0" & x"0000";
+---signal TCP002_TX_STREAM_SEL: integer range 0 to (NTCPSTREAMS-1);	
+---signal TCP002_TCP_TX_CTS: std_logic_vector((NTCPSTREAMS-1) downto 0) := (others => '0');	
++--signal TCP002_TX_STREAM_SEL: integer range 0 to (NTCPSTREAMS-1);
++--signal TCP002_TCP_TX_CTS: std_logic_vector((NTCPSTREAMS-1) downto 0) := (others => '0');
+ 
+ --//-- APP -> TCP TX BUFFER
+ signal TCP_TXBUF_DATA: std_logic_vector(7 downto 0) := x"00";
+@@ -878,17 +934,39 @@ signal IP_ID: std_logic_vector(15 downto 0) := x"0000";
+ signal TX_MUX_STATE: integer range 0 to 10;	-- up to 6 protocol engines. Increase size if more.
+ 
+ --//-- ROUTING TABLE ARBITER --------------
+-signal RT_MUX_STATE: integer range 0 to 10;	
++signal RT_MUX_STATE: integer range 0 to 10;
+ 	-- 1 + number of transmit components vying for access to the routing table. Adjust as needed.
+ 
+---//-- TEST POINTS 
++-- Added 1/12/2015 BCD
++--//-- DHCP CLIENT ------------------------------------
++signal IPv4_ADDR: std_logic_vector(31 downto 0) := (others => '0');
++signal SUBNET_MASK_int: std_logic_vector(31 downto 0) := (others => '0');
++signal GATEWAY_IP_ADDR_int: std_logic_vector(31 downto 0) := (others => '0');
++signal DHCP_SYNC_RESET: std_logic := '0';
++signal DHCP_IPv4_ADDR: std_logic_vector(31 downto 0) := (others => '0');
++signal DHCP_SUBNET_MASK: std_logic_vector(31 downto 0) := (others => '0');
++signal DHCP_ROUTER: std_logic_vector(31 downto 0) := (others => '0');
++signal DHCP_MAC_TX_DATA: std_logic_vector(7 downto 0) := x"00";
++signal DHCP_MAC_TX_DATA_VALID: std_logic := '0';
++signal DHCP_MAC_TX_EOF: std_logic := '0';
++signal DHCP_MAC_TX_CTS: std_logic := '0';
++signal DHCP_RTS: std_logic := '0';
++signal TP_DHCP: std_logic_vector(10 downto 1)  := (others => '0');
++signal DHCP_ENABLE_int : std_logic;
++signal LAST_IPv4_ADDR : std_logic_vector(31 downto 0) := (others => '0');
++
++--//-- TEST POINTS
+ ------------------------------------------------------
+ --      IMPLEMENTATION
+ --------------------------------------------------------
+ begin
+ 
++	--mod. by CAR and BD
++	--slice out IPv4 address
++	RX_SRC_IP_ADDR <= RX_SOURCE_IP_ADDR(31 downto 0);
++
+ --//-- TIMERS -----------------------------
+-	Inst_TIMER_4US: TIMER_4US 
++	Inst_TIMER_4US: TIMER_4US
+ 	GENERIC MAP(
+ 		CLK_FREQUENCY => CLK_FREQUENCY
+ 	)
+@@ -901,10 +979,105 @@ begin
+ 
+ TICK_100MS <= TICK_4US when (SIMULATION = '1') else TICK_100MS_rt;	-- to accelerate simulations
+ 
++	--added CAR
++	FIXED_IP_gen : if FIXED_IP generate
++		IPv4_ADDR <= x"c0a8027b"; -- 192.168.2.123
++		SUBNET_MASK_int <= x"ffffff00"; -- 255.255.255.0
++		GATEWAY_IP_ADDR_int <= x"c0a80201"; -- 192.168.2.1
++	end generate;
++
++	-- Added 1/12/15 BCD
++	--//-- DHCP CLIENT (DYNAMIC IP) -----------------------------------------
++	DHCP_CLIENT_001: if not WITH_DHCP_CLIENT and not FIXED_IP generate
++		-- no DHCP client is instantiated. Always static IP address
++		IPv4_ADDR <= REQUESTED_IPv4_ADDR;
++		SUBNET_MASK_int <= SUBNET_MASK;
++		GATEWAY_IP_ADDR_int <= GATEWAY_IP_ADDR;
++	end generate;
++
++	DHCP_CLIENT_002: if WITH_DHCP_CLIENT and not FIXED_IP generate
++		--synchronize DHCP enable onto clock domain
++		dhcp_enable_synchronizer : entity work.synchronizer
++		port map(rst => SYNC_RESET, clk => CLK, data_in => DYNAMIC_IP, data_out => DHCP_ENABLE_int);
++
++		-- mux the IP addr and remember the last assigned address
++		DHCP_LAST_IPv4_ADDR_GEN: process(CLK)
++			variable DHCP_completed : boolean;
++		begin
++			if rising_edge(CLK) then
++
++				--if DHCP not enabled or completed fall back to static
++				if (DHCP_ENABLE_int = '0') or (not DHCP_completed) then
++					IPv4_ADDR <= REQUESTED_IPv4_ADDR;
++					SUBNET_MASK_int <= SUBNET_MASK;
++					GATEWAY_IP_ADDR_int <= GATEWAY_IP_ADDR;
++				else
++					-- dynamic IP address, based on DHCP server assignment
++					IPv4_ADDR <= DHCP_IPv4_ADDR;
++					SUBNET_MASK_int <= DHCP_SUBNET_MASK;
++					GATEWAY_IP_ADDR_int <= DHCP_ROUTER;
++				end if;
++
++				--latch last DHCP address
++				if DHCP_completed then
++					LAST_IPv4_ADDR <= DHCP_IPv4_ADDR;
++				end if;
++
++				--DHCP_IPv4_ADDR resets to all zeros when DHCP is restarted
++				if DHCP_IPv4_ADDR = x"00000000" then
++					DHCP_completed := false;
++				else
++					DHCP_completed := true;
++				end if;
++
++			end if;
++		end process;
++
++		-- keep this component in reset if the user selects static IP
++		DHCP_SYNC_RESET <= (not DHCP_ENABLE_int) or SYNC_RESET;
++
++		Inst_DHCP_CLIENT: DHCP_CLIENT
++		GENERIC MAP(
++			SIMULATION => SIMULATION
++		)
++		PORT MAP(
++			SYNC_RESET => DHCP_SYNC_RESET,
++			CLK => CLK,
++			TICK_4US => TICK_4US,
++			TICK_100MS => TICK_100MS,
++			MAC_ADDR => MAC_ADDR,
++			LAST_IPv4_ADDR => LAST_IPv4_ADDR,
++			IPv4_ADDR => DHCP_IPv4_ADDR,
++			LEASE_TIME => open,
++			SUBNET_MASK => DHCP_SUBNET_MASK,
++			ROUTER => DHCP_ROUTER,
++			DNS1 => open,
++			DNS2 => open,
++			IP_ID_IN => IP_ID,
++			IP_RX_DATA => IP_RX_DATA,
++			IP_RX_DATA_VALID => IP_RX_DATA_VALID,
++			IP_RX_SOF => IP_RX_SOF,
++			IP_RX_EOF => IP_RX_EOF,
++			IP_BYTE_COUNT => IP_BYTE_COUNT,
++			IP_HEADER_FLAG => IP_HEADER_FLAG,
++			RX_IP_PROTOCOL => RX_IP_PROTOCOL,
++			RX_IP_PROTOCOL_RDY => RX_IP_PROTOCOL_RDY,
++			RX_SOURCE_IP_ADDR => RX_SOURCE_IP_ADDR(31 downto 0),
++			RX_UDP_CKSUM => RX_UDP_CKSUM,
++			RX_UDP_CKSUM_RDY => RX_UDP_CKSUM_RDY,
++			-- MAC interface
++			MAC_TX_DATA => DHCP_MAC_TX_DATA,
++			MAC_TX_DATA_VALID => DHCP_MAC_TX_DATA_VALID,
++			MAC_TX_EOF => DHCP_MAC_TX_EOF,
++			MAC_TX_CTS => DHCP_MAC_TX_CTS,
++			RTS => DHCP_RTS,
++			TP => TP_DHCP
++		);
++	end generate;
+ 
+ --//-- PARSE INCOMING PACKET --------------
+ -- Code is common to all protocols. Extracts key information from incoming packets.
+-	Inst_PACKET_PARSING: PACKET_PARSING 
++	Inst_PACKET_PARSING: PACKET_PARSING
+ 	GENERIC MAP(
+ 		IPv6_ENABLED => IPv6_ENABLED,
+ 		SIMULATION => SIMULATION
+@@ -955,11 +1128,11 @@ TICK_100MS <= TICK_4US when (SIMULATION = '1') else TICK_100MS_rt;	-- to acceler
+ 		CS2_CLK => open,
+ 		TP => TP_PARSING
+ 	);
+-	
+-	
++
++
+ --//-- ARP REPLY --------------
+ -- Instantiated once per PHY.   IPv4-only. Use NDP for IPv6.
+-	Inst_ARP: ARP 
++	Inst_ARP: ARP
+ 	PORT MAP(
+ 		CLK => CLK,
+ 		SYNC_RESET => SYNC_RESET,
+@@ -980,10 +1153,10 @@ TICK_100MS <= TICK_4US when (SIMULATION = '1') else TICK_100MS_rt;	-- to acceler
+ 		RTS => ARP_RTS,
+ 		TP => TP_ARP
+ 	);
+-	
++
+ --//-- PING REPLY --------------
+ -- Instantiated once per PHY.
+-	Inst_PING: PING 
++	Inst_PING: PING
+ 	GENERIC MAP(
+ 		IPv6_ENABLED => IPv6_ENABLED,
+ 		MAX_PING_SIZE => x"0200"	-- 512 byte threshold for ping requests
+@@ -1002,17 +1175,17 @@ TICK_100MS <= TICK_4US when (SIMULATION = '1') else TICK_100MS_rt;	-- to acceler
+ 		RX_IP_PROTOCOL => RX_IP_PROTOCOL,
+ 		RX_IP_PROTOCOL_RDY => RX_IP_PROTOCOL_RDY,
+ 		IP_RX_DATA_VALID => IP_RX_DATA_VALID,
+-		IP_RX_EOF => IP_RX_EOF,		
+-		MAC_TX_DATA => PING_MAC_TX_DATA,	
++		IP_RX_EOF => IP_RX_EOF,
++		MAC_TX_DATA => PING_MAC_TX_DATA,
+ 		MAC_TX_DATA_VALID => PING_MAC_TX_DATA_VALID,
+ 		MAC_TX_EOF => PING_MAC_TX_EOF,
+ 		MAC_TX_CTS => PING_MAC_TX_CTS,
+ 		RTS => PING_RTS,
+ 		TP => TP_PING
+ 	);
+-	
++
+ --//-- WHOIS ---------------------------------------------
+--- Sends ARP requests 
++-- Sends ARP requests
+ -- Currently only used by UDP tx
+ WHOIS2_X: if(NUDPTX /= 0) generate
+ 	WHOIS2_001: WHOIS2 PORT MAP(
+@@ -1040,16 +1213,16 @@ ARP_CACHE2_X: if(NUDPTX /= 0) generate
+ 		SYNC_RESET => SYNC_RESET,
+ 		CLK => CLK,
+ 		TICK_100MS => TICK_100MS,
+-		RT_IP_ADDR => RT_IP_ADDR,	
+-		RT_REQ_RTS => RT_REQ_RTS,	
+-		RT_CTS => RT_CTS,	
++		RT_IP_ADDR => RT_IP_ADDR,
++		RT_REQ_RTS => RT_REQ_RTS,
++		RT_CTS => RT_CTS,
+ 		RT_MAC_REPLY => RT_MAC_REPLY,
+ 		RT_MAC_RDY => RT_MAC_RDY,
+ 		RT_NAK => RT_NAK,
+ 		MAC_ADDR => MAC_ADDR,
+ 		IPv4_ADDR => IPv4_ADDR,
+-		SUBNET_MASK => SUBNET_MASK,
+-		GATEWAY_IP_ADDR => GATEWAY_IP_ADDR,
++		SUBNET_MASK => SUBNET_MASK_int,
++		GATEWAY_IP_ADDR => GATEWAY_IP_ADDR_int,
+ 		WHOIS_IP_ADDR => WHOIS_IP_ADDR,
+ 		WHOIS_START => WHOIS_START,
+ 		RX_SOURCE_ADDR_RDY => MAC_RX_EOF,
+@@ -1097,15 +1270,15 @@ IGMP_QUERY_001x: if (IGMP_EN = '1') and (NUDPTX /= 0) generate
+ 					-- counts from 0 to 64 and stay there
+ 					TICK_CNTR <= TICK_CNTR + 1;
+ 			  end if;
+-			  
++
+ 			  -- modulo 1024 counter
+ 			  if (SYNC_RESET = '1') then
+ 					TICK_CNTR2 <= (others => '0');
+ 			  elsif(TICK_100MS = '1') then
+ 					TICK_CNTR2 <= TICK_CNTR2 + 1;
+ 			  end if;
+-			  
+-			  
++
++
+ 			  if(TICK_100MS = '1') and (TICK_CNTR(6) = '0') and (TICK_CNTR(4 downto 0) = 0) then
+ 					-- generate two pulses at 3.4 and 6.4s after reset
+ 					IGMP_TRIGGER_RESPONSE2 <= '1';
+@@ -1126,12 +1299,12 @@ IGMP_QUERY_001x: if (IGMP_EN = '1') and (NUDPTX /= 0) generate
+ 	-- 0.0.0.0 to signify that IP multicasting is not supported here.
+ 	IGMP_REPORT_START <= (IGMP_TRIGGER_RESPONSE or IGMP_TRIGGER_RESPONSE2 or IGMP_TRIGGER_RESPONSE3) when (MULTICAST_IP_ADDR /= 0) else '0';
+ 
+-	IGMP_REPORT_001: IGMP_REPORT 
++	IGMP_REPORT_001: IGMP_REPORT
+ 	PORT MAP(
+ 		SYNC_RESET => SYNC_RESET,
+ 		CLK => CLK,
+ 		MULTICAST_IP_ADDR => MULTICAST_IP_ADDR,
+-		IGMP_START => IGMP_REPORT_START,  
++		IGMP_START => IGMP_REPORT_START,
+ 		MAC_ADDR => MAC_ADDR,
+ 		IPv4_ADDR => IPv4_ADDR,
+ 		IP_ID => IP_ID,
+@@ -1144,49 +1317,51 @@ IGMP_QUERY_001x: if (IGMP_EN = '1') and (NUDPTX /= 0) generate
+ 	);
+ end generate;
+ 
+---//-- UDP RX to Serial (Monitoring and control) ---------
+-	Inst_UDP2SERIAL: UDP2SERIAL 
+-	GENERIC MAP(
+-		PORT_NO => x"0405",  --1029
+-		CLK_FREQUENCY => CLK_FREQUENCY
+-	)
+-	PORT MAP(
+-		CLK => CLK,
+-		SYNC_RESET => SYNC_RESET,
+-		IP_RX_DATA => IP_RX_DATA,
+-		IP_RX_DATA_VALID => IP_RX_DATA_VALID,
+-		IP_RX_SOF => IP_RX_SOF,
+-		IP_RX_EOF => IP_RX_EOF,
+-		IP_HEADER_FLAG => IP_HEADER_FLAG,
+-		RX_IP_PROTOCOL => RX_IP_PROTOCOL,
+-		RX_IP_PROTOCOL_RDY => RX_IP_PROTOCOL_RDY,
+-		SERIAL_OUT => open,
+-		TP => open
+-	);
++-- commented out by CAR to avoid unecssary dependency
++-- --//-- UDP RX to Serial (Monitoring and control) ---------
++-- 	Inst_UDP2SERIAL: UDP2SERIAL
++-- 	GENERIC MAP(
++-- 		PORT_NO => x"0405",  --1029
++-- 		CLK_FREQUENCY => CLK_FREQUENCY
++-- 	)
++-- 	PORT MAP(
++-- 		CLK => CLK,
++-- 		SYNC_RESET => SYNC_RESET,
++-- 		IP_RX_DATA => IP_RX_DATA,
++-- 		IP_RX_DATA_VALID => IP_RX_DATA_VALID,
++-- 		IP_RX_SOF => IP_RX_SOF,
++-- 		IP_RX_EOF => IP_RX_EOF,
++-- 		IP_HEADER_FLAG => IP_HEADER_FLAG,
++-- 		RX_IP_PROTOCOL => RX_IP_PROTOCOL,
++-- 		RX_IP_PROTOCOL_RDY => RX_IP_PROTOCOL_RDY,
++-- 		SERIAL_OUT => open,
++-- 		TP => open
++-- 	);
+ 
+ --//-- UDP RX ------------------------------------
+ UDP_RX_X: if(NUDPRX /= 0) generate
+-    -- UDP receiver should also check multicast addresses
+-    UDP_RX_VALID_DEST_IP_GEN: process(CLK)
+-    begin
+-        if rising_edge(CLK) then
+-            if(RX_DEST_IP_ADDR(31 downto 0) = IPv4_ADDR) then
+-                UDP_RX_VALID_DEST_IP <= '1';
+-            elsif(MULTICAST_IP_ADDR(31 downto 24) /= 0) and (RX_DEST_IP_ADDR(31 downto 0) = MULTICAST_IP_ADDR) then
+-                UDP_RX_VALID_DEST_IP <= '1';
+-            else
+-                UDP_RX_VALID_DEST_IP <= '0';
+-            end if;
+-        end if;
+-    end process;
+-    IP_RX_DATA_VALID3 <= IP_RX_DATA_VALID2 and UDP_RX_VALID_DEST_IP;
+-    
+-	UDP_RX_001: UDP_RX 
++		-- commented out by CAR and BRJ because fails to check broadcast
++    -- -- UDP receiver should also check multicast addresses
++    -- UDP_RX_VALID_DEST_IP_GEN: process(CLK)
++    -- begin
++    --     if rising_edge(CLK) then
++    --         if(RX_DEST_IP_ADDR(31 downto 0) = IPv4_ADDR) then
++    --             UDP_RX_VALID_DEST_IP <= '1';
++    --         elsif(MULTICAST_IP_ADDR(31 downto 24) /= 0) and (RX_DEST_IP_ADDR(31 downto 0) = MULTICAST_IP_ADDR) then
++    --             UDP_RX_VALID_DEST_IP <= '1';
++    --         else
++    --             UDP_RX_VALID_DEST_IP <= '0';
++    --         end if;
++    --     end if;
++    -- end process;
++    -- IP_RX_DATA_VALID3 <= IP_RX_DATA_VALID2 and UDP_RX_VALID_DEST_IP;
++
++	UDP_RX_001: UDP_RX
+ 	PORT MAP(
+ 		SYNC_RESET => SYNC_RESET,
+ 		CLK => CLK,
+ 		IP_RX_DATA => IP_RX_DATA,
+-		IP_RX_DATA_VALID => IP_RX_DATA_VALID3,
++		IP_RX_DATA_VALID => IP_RX_DATA_VALID, --mod by CAR and BRJ
+ 		IP_RX_SOF => IP_RX_SOF,
+ 		IP_RX_EOF => IP_RX_EOF,
+ 		IP_BYTE_COUNT => IP_BYTE_COUNT,
+@@ -1203,17 +1378,17 @@ UDP_RX_X: if(NUDPRX /= 0) generate
+ 		APP_DATA_VALID => UDP_RX_DATA_VALID,
+ 		APP_SOF => UDP_RX_SOF,
+ 		APP_EOF => UDP_RX_EOF,
+-		APP_SRC_UDP_PORT => open,
++		APP_SRC_UDP_PORT => UDP_RX_SRC_PORT_NO,
+ 		APP_DEST_UDP_PORT => UDP_RX_DEST_PORT_NO_OUT,
+ 		TP => TP_UDP_RX
+ 	);
+-end generate;	
++end generate;
+ 
+ 
+ 
+ --//-- UDP TX ------------------------------------
+ UDP_TX_NZ: if(NUDPTX /= 0) generate
+-	UDP_TX_001: UDP_TX 
++	UDP_TX_001: UDP_TX
+ 	GENERIC MAP(
+ 		NBUFS => 1,
+ 		IPv6_ENABLED => '0'
+@@ -1232,7 +1407,7 @@ UDP_TX_NZ: if(NUDPTX /= 0) generate
+ 		NAK => UDP_TX_NAK_local,
+ 		DEST_IP_ADDR => UDP_TX_DEST_IP_ADDR,
+ 		DEST_PORT_NO => UDP_TX_DEST_PORT_NO,
+-		SOURCE_PORT_NO => UDP_TX_SOURCE_PORT_NO,	
++		SOURCE_PORT_NO => UDP_TX_SOURCE_PORT_NO,
+ 		IPv4_6n => '1',
+ 		-- Configuration
+ 		MAC_ADDR => MAC_ADDR,
+@@ -1263,18 +1438,18 @@ UDP_TX_NAK <= UDP_TX_NAK_local;
+ 
+ TCP_SERVER_X: if (NTCPSTREAMS /= 0) generate
+ 	-- TCP_SERVER does the conversion between TCP port number and stream number (and vice versa)
+-	TCP_LOCAL_PORTS(0) <= x"0404";	--  port 1028
+-	
++	TCP_LOCAL_PORTS(0) <= TCP_PORT_NO;
++
+ 	TCP_SERVER_X: if (NTCPSTREAMS > 1) generate
+ 		TCP_LOCAL_PORTS(1) <= x"0400";	--  port 1024
+ 	end generate;
+ 		--TCP_LOCAL_PORTS(1) <= x"0401";	--  port 1025
+ 		--TCP_LOCAL_PORTS(2) <= x"0402";	--  port 1026
+ 
+-		TCP_SERVER_001: TCP_SERVER 
++		TCP_SERVER_001: TCP_SERVER
+ 		GENERIC MAP(
+ 			NTCPSTREAMS => NTCPSTREAMS,
+-			MSS => x"05B4",	-- 1460 bytes	
++			MSS => x"05B4",	-- 1460 bytes
+ 			IPv6_ENABLED => IPv6_ENABLED,
+ 			SIMULATION => SIMULATION
+ 		)
+@@ -1311,7 +1486,7 @@ TCP_SERVER_X: if (NTCPSTREAMS /= 0) generate
+ 			RX_SOF => TCP001_RX_SOF,
+ 			RX_STREAM_NO => TCP001_RX_STREAM_NO,
+ 			RX_EOF => TCP001_RX_EOF,
+-			RX_FREE_SPACE => TCP001_RX_FREE_SPACE,	
++			RX_FREE_SPACE => TCP001_RX_FREE_SPACE,
+ 			TX_PACKET_SEQUENCE_START_OUT => TCP001_TX_PACKET_SEQUENCE_START,
+ 			TX_DEST_MAC_ADDR_OUT => TCP001_TX_DEST_MAC_ADDR,
+ 			TX_DEST_IP_ADDR_OUT => TCP001_TX_DEST_IP_ADDR,
+@@ -1337,11 +1512,11 @@ TCP_SERVER_X: if (NTCPSTREAMS /= 0) generate
+ 			TP => TP_TCP_SERVER
+ 		);
+ TCP_CONNECTED_FLAG <= TCP001_CONNECTED_FLAG;
+-		
++
+ 	-- assemble tx packet (MAC/IP/TCP)
+-		Inst_TCP_TX: TCP_TX 
++		Inst_TCP_TX: TCP_TX
+ 		GENERIC MAP(
+-			MSS => x"05B4",	-- 1460 bytes	
++			MSS => x"05B4",	-- 1460 bytes
+ 			IPv6_ENABLED => IPv6_ENABLED
+ 		)
+ 		PORT MAP(
+@@ -1368,7 +1543,7 @@ TCP_CONNECTED_FLAG <= TCP001_CONNECTED_FLAG;
+ 			TX_PAYLOAD_CTS => TCP001_TX_PAYLOAD_CTS,
+ 			TX_PAYLOAD_SIZE => TCP001_TX_PAYLOAD_SIZE,
+ 			TX_PAYLOAD_CHECKSUM => TCP001_TX_PAYLOAD_CHECKSUM,
+-			MAC_TX_DATA => TCP001_MAC_TX_DATA,	
++			MAC_TX_DATA => TCP001_MAC_TX_DATA,
+ 			MAC_TX_DATA_VALID => TCP001_MAC_TX_DATA_VALID,
+ 			MAC_TX_EOF => TCP001_MAC_TX_EOF,
+ 			MAC_TX_CTS => TCP001_MAC_TX_CTS,
+@@ -1376,7 +1551,7 @@ TCP_CONNECTED_FLAG <= TCP001_CONNECTED_FLAG;
+ 		);
+ 
+ 
+-		Inst_TCP_RXBUFNDEMUX2: TCP_RXBUFNDEMUX2 
++		Inst_TCP_RXBUFNDEMUX2: TCP_RXBUFNDEMUX2
+ 		GENERIC MAP(
+ 			NTCPSTREAMS => NTCPSTREAMS,
+ 			NBUFS => 8		-- must be large enough to include 2 MSS per enabled TCP stream. Min = 2. Recommended 4 or 8.
+@@ -1389,7 +1564,7 @@ TCP_CONNECTED_FLAG <= TCP001_CONNECTED_FLAG;
+ 			RX_SOF => TCP001_RX_SOF,
+ 			RX_STREAM_NO => TCP001_RX_STREAM_NO,
+ 			RX_EOF => TCP001_RX_EOF,
+-			RX_FREE_SPACE => TCP001_RX_FREE_SPACE,	
++			RX_FREE_SPACE => TCP001_RX_FREE_SPACE,
+ 			RX_APP_DATA => TCP_RX_DATA,
+ 			RX_APP_DATA_VALID => TCP_RX_DATA_VALID,
+ 			RX_APP_SOF => open,
+@@ -1399,7 +1574,7 @@ TCP_CONNECTED_FLAG <= TCP001_CONNECTED_FLAG;
+ 			TP => open
+ 		);
+ 
+-		Inst_TCP_TXBUF: TCP_TXBUF 
++		Inst_TCP_TXBUF: TCP_TXBUF
+ 		GENERIC MAP(
+ 			NTCPSTREAMS => NTCPSTREAMS,
+ 			NBUFS => 4,
+@@ -1434,27 +1609,27 @@ TCP_CONNECTED_FLAG <= TCP001_CONNECTED_FLAG;
+ 		);
+ 		TCP_TX_CTS <= TCP001_TCP_TX_CTS;
+ end generate;
+-	
++
+  --//-- IP ID generation
+ -- Increment IP ID every time an IP datagram is sent
+ IP_ID_GEN_001: process(CLK)
+ begin
+ 	if rising_edge(CLK) then
+ 		if(SYNC_RESET = '1') then
+-			IP_ID <= (others => '0');	
++			IP_ID <= (others => '0');
+ 		elsif(TCP001_MAC_TX_EOF = '1') or (UDP001_MAC_TX_EOF = '1') or (IGMP_MAC_TX_EOF = '1') then
+-			-- increment every time an IP packet is send. 
++			-- increment every time an IP packet is send.
+ 			-- Adjust as needed when other IP/UDP/TCP components are instantiated
+ 			IP_ID <= IP_ID + 1;
+ 		end if;
+ 	end if;
+ end process;
+ 
+-	
++
+ --//-- TRANSMISSION ARBITER --------------
+ -- determines the source for the next packet to be transmitted.
+--- State machine to prevent overlapping between two packets ready... 
+--- For example, one has to wait until a UDP packet has completed transmission 
++-- State machine to prevent overlapping between two packets ready...
++-- For example, one has to wait until a UDP packet has completed transmission
+ -- before starting to send a TCP packet.
+ TX_MUX_001: process(CLK)
+ begin
+@@ -1468,15 +1643,17 @@ begin
+ 			elsif(PING_RTS = '1') then
+ 				TX_MUX_STATE <= 2;	-- enable PING response
+ 			elsif(TCP001_RTS = '1') and (NTCPSTREAMS /= 0) then
+-				TX_MUX_STATE <= 3;	-- enable TCP001 transmission 
++				TX_MUX_STATE <= 3;	-- enable TCP001 transmission
+ 			elsif(WHOIS_RTS = '1') and (NUDPTX /= 0) then
+ 				TX_MUX_STATE <= 4;	-- enable WHOIS transmission
+ 			elsif(UDP001_RTS = '1') and (NUDPTX /= 0) then
+ 				TX_MUX_STATE <= 5;	-- enable UDP001 transmission (duplicate as needed)
+ 			elsif(IGMP_RTS = '1') and (IGMP_EN = '1') and (NUDPTX /= 0) then
+-                TX_MUX_STATE <= 6;    -- enable IGMP message transmission
++				TX_MUX_STATE <= 6;    -- enable IGMP message transmission
++			elsif(DHCP_RTS = '1') and WITH_DHCP_CLIENT then
++				TX_MUX_STATE <= 7;    -- enable DHCP transmission
+ --			elsif(TCP002_RTS = '1') and (NTCPSTREAMS /= 0) then
+---				TX_MUX_STATE <= 7;	-- enable TCP002 transmission 
++--				TX_MUX_STATE <= 7;	-- enable TCP002 transmission
+ 			end if;
+ 
+ 		-- Done transmitting. go from ... to idle
+@@ -1484,28 +1661,31 @@ begin
+ 			TX_MUX_STATE <= 0;	-- idle
+ 	 	elsif(TX_MUX_STATE = 2) and (PING_MAC_TX_EOF = '1') then
+ 			TX_MUX_STATE <= 0;	-- idle
+-	 	elsif(TX_MUX_STATE = 3) and (TCP001_MAC_TX_EOF = '1') and (NTCPSTREAMS /= 0)  then 
++	 	elsif(TX_MUX_STATE = 3) and (TCP001_MAC_TX_EOF = '1') and (NTCPSTREAMS /= 0)  then
+ 			TX_MUX_STATE <= 0;	-- idle
+ 	 	elsif(TX_MUX_STATE = 4) and (WHOIS_MAC_TX_EOF = '1') and (NUDPTX /= 0) then
+ 			TX_MUX_STATE <= 0;	-- idle
+ 	 	elsif(TX_MUX_STATE = 5) and (UDP001_MAC_TX_EOF = '1') and (NUDPTX /= 0) then -- (duplicate as needed)
+ 			TX_MUX_STATE <= 0;	-- idle
+-	 	elsif(TX_MUX_STATE = 6) and (IGMP_MAC_TX_EOF = '1') and (IGMP_EN = '1') and (NUDPTX /= 0)then 
+-            TX_MUX_STATE <= 0;    -- idle
+---	 	elsif(TX_MUX_STATE = 7) and (TCP002_MAC_TX_EOF = '1') and (NTCPSTREAMS /= 0)  then 
++	 	elsif(TX_MUX_STATE = 6) and (IGMP_MAC_TX_EOF = '1') and (IGMP_EN = '1') and (NUDPTX /= 0)then
++			TX_MUX_STATE <= 0;    -- idle
++		elsif(TX_MUX_STATE = 7) and (DHCP_MAC_TX_EOF = '1') and WITH_DHCP_CLIENT then
++			TX_MUX_STATE <= 0;    -- idle
++--	 	elsif(TX_MUX_STATE = 7) and (TCP002_MAC_TX_EOF = '1') and (NTCPSTREAMS /= 0)  then
+ --			TX_MUX_STATE <= 0;	-- idle
+ 	 	end if;
+ 	end if;
+ end process;
+ 
+ MAC_TX_RTS <= ARP_RTS or PING_RTS or TCP001_RTS or WHOIS_RTS or UDP001_RTS or IGMP_RTS;
+-	
++
+ TX_MUX_002: process(TX_MUX_STATE, ARP_MAC_TX_EOF, ARP_MAC_TX_DATA_VALID, ARP_MAC_TX_DATA,
+ 							PING_MAC_TX_EOF, PING_MAC_TX_DATA_VALID, PING_MAC_TX_DATA,
+ 							TCP001_MAC_TX_EOF, TCP001_MAC_TX_DATA_VALID, TCP001_MAC_TX_DATA,
+ 							WHOIS_MAC_TX_DATA, WHOIS_MAC_TX_DATA_VALID, WHOIS_MAC_TX_EOF,
+ 							UDP001_MAC_TX_DATA, UDP001_MAC_TX_DATA_VALID, UDP001_MAC_TX_EOF,
+-							IGMP_MAC_TX_DATA, IGMP_MAC_TX_DATA_VALID, IGMP_MAC_TX_EOF)
++							IGMP_MAC_TX_DATA, IGMP_MAC_TX_DATA_VALID, IGMP_MAC_TX_EOF,
++							DHCP_MAC_TX_DATA, DHCP_MAC_TX_DATA_VALID, DHCP_MAC_TX_EOF)
+ begin
+ 	case(TX_MUX_STATE) is
+ 		when (1) =>
+@@ -1525,18 +1705,22 @@ begin
+ 			MAC_TX_DATA_VALID_local <= WHOIS_MAC_TX_DATA_VALID;
+ 			MAC_TX_EOF_local <= WHOIS_MAC_TX_EOF;
+ 		when (5) =>
+-            MAC_TX_DATA <= UDP001_MAC_TX_DATA;
+-            MAC_TX_DATA_VALID_local <= UDP001_MAC_TX_DATA_VALID;
+-            MAC_TX_EOF_local <= UDP001_MAC_TX_EOF;
+-        when (6) =>
+-            MAC_TX_DATA <= IGMP_MAC_TX_DATA;
+-            MAC_TX_DATA_VALID_local <= IGMP_MAC_TX_DATA_VALID;
+-            MAC_TX_EOF_local <= IGMP_MAC_TX_EOF;
++			MAC_TX_DATA <= UDP001_MAC_TX_DATA;
++			MAC_TX_DATA_VALID_local <= UDP001_MAC_TX_DATA_VALID;
++			MAC_TX_EOF_local <= UDP001_MAC_TX_EOF;
++		when (6) =>
++			MAC_TX_DATA <= IGMP_MAC_TX_DATA;
++			MAC_TX_DATA_VALID_local <= IGMP_MAC_TX_DATA_VALID;
++			MAC_TX_EOF_local <= IGMP_MAC_TX_EOF;
++		when (7) =>
++			MAC_TX_DATA <= DHCP_MAC_TX_DATA;
++			MAC_TX_DATA_VALID_local <= DHCP_MAC_TX_DATA_VALID;
++			MAC_TX_EOF_local <= DHCP_MAC_TX_EOF;
+ --		when (7) =>
+ --			MAC_TX_DATA <= TCP002_MAC_TX_DATA;
+ --			MAC_TX_DATA_VALID_local <= TCP002_MAC_TX_DATA_VALID;
+ --			MAC_TX_EOF_local <= TCP002_MAC_TX_EOF;
+-		when others => 
++		when others =>
+ 			MAC_TX_DATA <= (others => '0');
+ 			MAC_TX_DATA_VALID_local <= '0';
+ 			MAC_TX_EOF_local <= '0';
+@@ -1569,11 +1753,12 @@ TCP001_MAC_TX_CTS <= '1' when (TX_MUX_STATE = 3) else '0';
+ WHOIS_MAC_TX_CTS <= '1' when (TX_MUX_STATE = 4) else '0';
+ UDP001_MAC_TX_CTS <= '1' when (TX_MUX_STATE = 5) else '0';
+ IGMP_MAC_TX_CTS <= '1' when (TX_MUX_STATE = 6) else '0';
++DHCP_MAC_TX_CTS <= '1' when (TX_MUX_STATE = 7) else '0';
+ --TCP002_MAC_TX_CTS <= '1' when (TX_MUX_STATE = 7) else '0';
+ 
+ 
+ --//-- ROUTING TABLE ARBITER --------------
+--- Since several components could send simultaneous routing (RT) requests, one must 
++-- Since several components could send simultaneous routing (RT) requests, one must
+ -- determine who can access the routing table next
+ RT_MUX_001: process(CLK)
+ begin
+@@ -1596,7 +1781,7 @@ begin
+ 	 	end if;
+ 	end if;
+ end process;
+-	
++
+ RT_MUX_002: process(RT_MUX_STATE, UDP001_RT_IP_ADDR, UDP001_RT_REQ_RTS)
+ begin
+ 	case(RT_MUX_STATE) is
+@@ -1613,7 +1798,7 @@ begin
+ 			RT_REQ_RTS <= '0';
+ 	end case;
+ end process;
+-		
++
+ UDP001_RT_REQ_CTS <= RT_CTS when (RT_MUX_STATE = 1) else '0';
+ --UDP002_RT_REQ_CTS <= RT_CTS when (RT_MUX_STATE = 2) else '0';
+ --UDP003_RT_REQ_CTS <= RT_CTS when (RT_MUX_STATE = 3) else '0';
