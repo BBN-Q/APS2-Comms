@@ -3,9 +3,12 @@
 set APS2_COMMS_SCRIPT_PATH [file normalize [info script]]
 set APS2_COMMS_REPO_PATH [file dirname $APS2_COMMS_SCRIPT_PATH]/../
 
-# Rebuild user ip_repo's index with our UserIP before adding any source files
-set_property ip_repo_paths $APS2_COMMS_REPO_PATH/src/ip [current_project]
-update_ip_catalog -rebuild
+# add our IP to IP search path
+set repo_paths [get_property ip_repo_paths [current_fileset]]
+if { [lsearch -exact -nocase $repo_paths $APS2_COMMS_REPO_PATH/src/ip ] == -1 } {
+	set_property ip_repo_paths "$APS2_COMMS_REPO_PATH/src/ip [get_property ip_repo_paths [current_fileset]]" [current_fileset]
+	update_ip_catalog -rebuild
+}
 
 # create dependency outputs
 set cur_dir [pwd]
