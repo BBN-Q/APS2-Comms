@@ -41,7 +41,9 @@ foreach fifo $async_fifos {
 
 # eth_mac_1g_fifo synchronizes a few more FIFO status registers
 set eth_mac_1g_fifo_inst [get_cells aps2_comms_bd_inst/eth_mac_1g_fifo_wrapper_0/U0/eth_mac_1g_fifo_inst]
-set_property ASYNC_REG TRUE [get_cells -hier -regexp {.*/rx_sync_reg_[1234]_reg\[[01]\]} -filter "PARENT == $eth_mac_1g_fifo_inst"]
+if { !($eth_mac_1g_fifo_inst eq "") } {
+	set_property ASYNC_REG TRUE [get_cells -hier -regexp {.*/rx_sync_reg_[1234]_reg\[[01]\]} -filter "PARENT == $eth_mac_1g_fifo_inst"]
+}
 
 # TODO: not actually using this now
 #set rx_clk [get_clocks -of_objects [get_cells $eth_mac_1g_fifo_inst/rx_sync_reg_1]]
