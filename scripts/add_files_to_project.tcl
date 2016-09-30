@@ -36,7 +36,7 @@ file delete axis_demux_2.v axis_mux_3.v axis_arb_mux_3.v
 
 # patch the Com5402 module for UDP broadcast issue and add DHCP module
 cd $APS2_COMMS_REPO_PATH/deps/ComBlock/5402
-file copy -force com5402.vhd com5402_dhcp.vhd
+file copy -force com5402.vhd com5402.backup
 # on Windows look for Github git
 if { $tcl_platform(platform) == "windows"} {
 	set git_cmd [glob ~/AppData/Local/GitHub/PortableGit*/cmd/git.exe]
@@ -45,6 +45,7 @@ if { $tcl_platform(platform) == "windows"} {
 }
 # ignore whitespace warnings - seems a little dangerous
 exec -ignorestderr $git_cmd apply --directory=deps/ComBlock/5402 com5402_dhcp.patch
+file copy -force com5402.backup com5402.vhd
 cd $cur_dir
 
 
