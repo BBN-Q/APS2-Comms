@@ -99,8 +99,13 @@ update_compile_order -fileset sim_1
 add_files -fileset constrs_1 -norecurse $APS2_COMMS_REPO_PATH/constraints
 add_files -fileset constrs_1 -norecurse $APS2_COMMS_REPO_PATH/constraints/async_fifos.tcl
 
-source $APS2_COMMS_REPO_PATH/src/bd/aps2_comms_bd.tcl
+puts "Working on APS2 comms block diagram"
+source $APS2_COMMS_REPO_PATH/src/bd/aps2_comms_bd.tcl -quiet
 regenerate_bd_layout
+#optionally fix IP address
+if { [info exists FIXED_IP] && !($FIXED_IP eq "") } {
+	set_property -dict [list CONFIG.FIXED_IP {true}] [get_bd_cells com5402_wrapper_0]
+}
 validate_bd_design -quiet
 save_bd_design
 close_bd_design [get_bd_designs aps2_comms_bd]
