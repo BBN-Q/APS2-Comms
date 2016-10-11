@@ -16,11 +16,11 @@ entity com5402_wrapper is
 		rst     : in std_logic;
 		tcp_rst : in std_logic;
 
-		mac_addr		: in std_logic_vector(47 downto 0);
-		IPv4_addr	  : in std_logic_vector(31 downto 0);
-		subnet_mask : in std_logic_vector(31 downto 0);
-		gateway_ip_addr : in std_logic_vector(31 downto 0);
-		dhcp_enable : in std_logic;
+		mac_addr        : in std_logic_vector(47 downto 0) := (others => '0');
+		IPv4_addr       : in std_logic_vector(31 downto 0) := (others => '0');
+		subnet_mask     : in std_logic_vector(31 downto 0) := (others => '0');
+		gateway_ip_addr : in std_logic_vector(31 downto 0) := (others => '0');
+		dhcp_enable     : in std_logic := '0';
 
 		mac_tx_tdata	: out std_logic_vector(7 downto 0);
 		mac_tx_tvalid : out std_logic;
@@ -37,27 +37,27 @@ entity com5402_wrapper is
 		udp_rx_tdata	     : out std_logic_vector(7 downto 0);
 		udp_rx_tvalid      : out std_logic;
 		udp_rx_tlast	     : out std_logic;
-		udp_rx_dest_port   : in std_logic_vector(15 downto 0);
+		udp_rx_dest_port   : in std_logic_vector(15 downto 0) := (others => '0');
 		udp_rx_src_port    : out std_logic_vector(15 downto 0);
 		rx_src_ip_addr     : out std_logic_vector(31 downto 0);
 
-		udp_tx_tdata	      : in std_logic_vector(7 downto 0);
-		udp_tx_tvalid       : in std_logic;
-		udp_tx_tlast	      : in std_logic;
+		udp_tx_tdata	      : in std_logic_vector(7 downto 0) := (others => '0');
+		udp_tx_tvalid       : in std_logic := '0';
+		udp_tx_tlast	      : in std_logic := '0';
 		udp_tx_tready       : out std_logic;
-		udp_tx_src_port	    : in std_logic_vector(15 downto 0);
-		udp_tx_dest_port    : in std_logic_vector(15 downto 0);
-		udp_tx_dest_ip_addr : in std_logic_vector(31 downto 0);
+		udp_tx_src_port	    : in std_logic_vector(15 downto 0) := (others => '0');
+		udp_tx_dest_port    : in std_logic_vector(15 downto 0) := (others => '0');
+		udp_tx_dest_ip_addr : in std_logic_vector(31 downto 0) := (others => '0');
 		udp_tx_ack          : out std_logic;
 		udp_tx_nack         : out std_logic;
 
-		tcp_port      : in std_logic_vector(15 downto 0);
+		tcp_port      : in std_logic_vector(15 downto 0) := (others => '0');
 		tcp_rx_tdata	: out std_logic_vector(7 downto 0);
 		tcp_rx_tvalid : out std_logic;
-		tcp_rx_tready : in	std_logic;
+		tcp_rx_tready : in	std_logic := '1';
 
-		tcp_tx_tdata	: in std_logic_vector(7 downto 0);
-		tcp_tx_tvalid : in std_logic;
+		tcp_tx_tdata	: in std_logic_vector(7 downto 0) := (others => '0');
+		tcp_tx_tvalid : in std_logic := '0';
 		tcp_tx_tready	: out	std_logic
 
 	);

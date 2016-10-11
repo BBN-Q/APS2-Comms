@@ -32,13 +32,13 @@ entity tcp_bridge is
 		--CPLD streams
 		cpld_rx_tdata  : out std_logic_vector(31 downto 0);
 		cpld_rx_tvalid : out std_logic;
-		cpld_rx_tready : in std_logic;
+		cpld_rx_tready : in std_logic := '1';
 		cpld_rx_tlast  : out std_logic;
 
-		cpld_tx_tdata	 : in std_logic_vector(31 downto 0);
-		cpld_tx_tvalid : in std_logic;
+		cpld_tx_tdata	 : in std_logic_vector(31 downto 0) := (others => '0');
+		cpld_tx_tvalid : in std_logic := '0';
 		cpld_tx_tready : out std_logic;
-		cpld_tx_tlast	 : in std_logic;
+		cpld_tx_tlast	 : in std_logic := '0';
 
 		--AXI DataMover streams
 		MM2S_CMD_tdata  : out std_logic_vector( 71 downto 0 );
