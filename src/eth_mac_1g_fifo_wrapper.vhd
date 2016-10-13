@@ -47,7 +47,7 @@ entity eth_mac_1g_fifo_wrapper is
 		rx_fifo_bad_frame  : out std_logic;
 		rx_fifo_good_frame : out std_logic;
 
-		ifg_delay : in std_logic_vector(7 downto 0)
+		ifg_delay : in std_logic_vector(7 downto 0) := x"0c" --interframe gap of 12 -standard is 96 bits (12 bytes) see https://en.wikipedia.org/wiki/Interpacket_gap
 	);
 end entity;
 
