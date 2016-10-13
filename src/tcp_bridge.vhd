@@ -77,12 +77,14 @@ end entity;
 
 architecture arch of tcp_bridge is
 
-
 attribute X_INTERFACE_INFO : string;
 attribute X_INTERFACE_INFO of clk_tcp : signal is "xilinx.com:signal:clock:1.0 clk_tcp CLK";
 attribute X_INTERFACE_PARAMETER : string;
 attribute X_INTERFACE_PARAMETER of clk_tcp : signal is
 	"ASSOCIATED_BUSIF tcp_rx:tcp_tx, ASSOCIATED_RESET rst_tcp, FREQ_HZ 125000000";
+
+attribute X_INTERFACE_INFO of rst_tcp : signal is "xilinx.com:signal:reset:1.0 rst_tcp RST";
+attribute X_INTERFACE_PARAMETER of rst_tcp : signal is "POLARITY ACTIVE_HIGH";
 
 
 signal memory_rx_tdata : std_logic_vector(31 downto 0) := (others => '0');
