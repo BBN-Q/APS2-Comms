@@ -20,7 +20,7 @@ set script_folder [_tcl::get_script_folder]
 ################################################################
 # Check if script is running in correct Vivado version.
 ################################################################
-set scripts_vivado_version 2016.1
+set scripts_vivado_version 2016.3
 set current_vivado_version [version -short]
 
 if { [string first $scripts_vivado_version $current_vivado_version] == -1 } {
@@ -163,13 +163,11 @@ proc create_root_design { parentCell } {
   set cpld_rx [ create_bd_intf_port -mode Master -vlnv xilinx.com:interface:axis_rtl:1.0 cpld_rx ]
   set cpld_tx [ create_bd_intf_port -mode Slave -vlnv xilinx.com:interface:axis_rtl:1.0 cpld_tx ]
   set_property -dict [ list \
-CONFIG.FREQ_HZ {100000000} \
 CONFIG.HAS_TKEEP {0} \
 CONFIG.HAS_TLAST {1} \
 CONFIG.HAS_TREADY {1} \
 CONFIG.HAS_TSTRB {0} \
 CONFIG.LAYERED_METADATA {undef} \
-CONFIG.PHASE {0.000} \
 CONFIG.TDATA_NUM_BYTES {4} \
 CONFIG.TDEST_WIDTH {0} \
 CONFIG.TID_WIDTH {0} \
@@ -177,13 +175,11 @@ CONFIG.TUSER_WIDTH {0} \
  ] $cpld_tx
   set tcp_rx [ create_bd_intf_port -mode Slave -vlnv xilinx.com:interface:axis_rtl:1.0 tcp_rx ]
   set_property -dict [ list \
-CONFIG.FREQ_HZ {125000000} \
 CONFIG.HAS_TKEEP {0} \
 CONFIG.HAS_TLAST {0} \
 CONFIG.HAS_TREADY {1} \
 CONFIG.HAS_TSTRB {0} \
 CONFIG.LAYERED_METADATA {undef} \
-CONFIG.PHASE {0.000} \
 CONFIG.TDATA_NUM_BYTES {1} \
 CONFIG.TDEST_WIDTH {0} \
 CONFIG.TID_WIDTH {0} \
@@ -213,6 +209,9 @@ CONFIG.FREQ_HZ {125000000} \
 CONFIG.POLARITY {ACTIVE_HIGH} \
  ] $rst
   set rst_tcp [ create_bd_port -dir I -type rst rst_tcp ]
+  set_property -dict [ list \
+CONFIG.POLARITY {ACTIVE_HIGH} \
+ ] $rst_tcp
   set s2mm_err [ create_bd_port -dir O s2mm_err ]
 
   # Create instance: axi_bram_ctrl_0, and set properties
@@ -285,7 +284,7 @@ CONFIG.use_bram_block.VALUE_SRC {DEFAULT} \
 
   # Perform GUI Layout
   regenerate_bd_layout -layout_string {
-   guistr: "# # String gsaved with Nlview 6.5.12  2016-01-29 bk=1.3547 VDI=39 GEI=35 GUI=JA:1.6
+   guistr: "# # String gsaved with Nlview 6.6.5b  2016-09-06 bk=1.3687 VDI=39 GEI=35 GUI=JA:1.6
 #  -string -flagsOSRD
 preplace port s2mm_err -pg 1 -y 240 -defaultsOSRD
 preplace port tcp_rx -pg 1 -y 480 -defaultsOSRD
@@ -303,27 +302,27 @@ preplace inst blk_mem_gen_0 -pg 1 -lvl 4 -y 300 -defaultsOSRD
 preplace inst axi_datamover_0 -pg 1 -lvl 1 -y 170 -defaultsOSRD
 preplace inst axi_interconnect_0 -pg 1 -lvl 2 -y 140 -defaultsOSRD
 preplace inst axi_bram_ctrl_0 -pg 1 -lvl 3 -y 300 -defaultsOSRD
-preplace netloc axi_datamover_0_M_AXIS_S2MM_STS 1 1 1 500
-preplace netloc axi_datamover_0_M_AXIS_MM2S_STS 1 1 1 490
 preplace netloc tcp_bridge_0_tcp_tx 1 2 3 NJ 510 NJ 510 NJ
 preplace netloc cpld_tx_1 1 0 2 NJ 460 NJ
-preplace netloc axi_datamover_0_mm2s_err 1 1 4 NJ 290 NJ 210 NJ 210 NJ
+preplace netloc axi_datamover_0_M_AXIS_S2MM_STS 1 1 1 490
+preplace netloc axi_datamover_0_M_AXIS_MM2S_STS 1 1 1 480
+preplace netloc axi_datamover_0_mm2s_err 1 1 4 500J 290 810J 210 NJ 210 1320J
 preplace netloc tcp_rx_1 1 0 2 NJ 480 NJ
 preplace netloc rst_tcp_1 1 0 2 NJ 560 NJ
 preplace netloc axi_bram_ctrl_0_BRAM_PORTA 1 3 1 NJ
 preplace netloc rst_1 1 0 2 NJ 520 NJ
-preplace netloc axi_datamover_0_M_AXI_S2MM 1 1 1 460
+preplace netloc axi_datamover_0_M_AXI_S2MM 1 1 1 470
 preplace netloc clk_tcp_1 1 0 2 NJ 540 NJ
-preplace netloc axi_datamover_0_s2mm_err 1 1 4 NJ 300 NJ 230 NJ 230 NJ
+preplace netloc axi_datamover_0_s2mm_err 1 1 4 460J 300 830J 230 NJ 230 1320J
 preplace netloc tcp_bridge_0_MM2S_CMD 1 0 3 60 340 NJ 340 820
-preplace netloc clk_1 1 0 3 30 20 510 310 NJ
+preplace netloc clk_1 1 0 3 30 500 510 310 840J
 preplace netloc tcp_bridge_0_S2MM 1 0 3 40 350 NJ 350 810
-preplace netloc axi_datamover_0_M_AXIS_MM2S 1 1 1 480
+preplace netloc axi_datamover_0_M_AXIS_MM2S 1 1 1 470
 preplace netloc tcp_bridge_0_cpld_rx 1 2 3 NJ 490 NJ 490 NJ
 preplace netloc axi_interconnect_0_M00_AXI 1 2 1 820
-preplace netloc axi_resetn_1 1 0 3 20 10 530 320 NJ
+preplace netloc axi_resetn_1 1 0 3 20 320 520 320 NJ
 preplace netloc tcp_bridge_0_S2MM_CMD 1 0 3 50 330 NJ 330 840
-preplace netloc axi_datamover_0_M_AXI_MM2S 1 1 1 520
+preplace netloc axi_datamover_0_M_AXI_MM2S 1 1 1 460
 levelinfo -pg 1 0 260 670 970 1210 1340 -top 0 -bot 610
 ",
 }
