@@ -4,12 +4,12 @@
 # Usage: at the Tcl console manually set the argv to set the PROJECT_DIR and PROJECT_NAME and
 # then source this file. E.g.
 #
-# set argv [list "/home/cryan/Programming/FPGA" "APS2-Comms-sims"] or
-# or  set argv [list "C:/Users/qlab/Documents/Xilinx Projects/" "APS2-Comms-sims"]
+# set argv [list "/home/cryan/Programming/FPGA" "APS2-Comms-sim"] or
+# or  set argv [list "C:/Users/qlab/Documents/Xilinx Projects/" "APS2-Comms-sim"]
 # source create_sim_project.tcl
 #
 # from Vivado batch mode use the -tclargs to pass argv
-# vivado -mode batch -source create_sim_project.tcl -tclargs "/home/cryan/Programming/FPGA" "APS2-Comms-sims"
+# vivado -mode batch -source create_sim_project.tcl -tclargs "/home/cryan/Programming/FPGA" "APS2-Comms-sim"
 ##################################################################
 
 # parse arguments

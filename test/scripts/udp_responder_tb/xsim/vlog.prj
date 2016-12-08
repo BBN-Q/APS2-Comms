@@ -1,4 +1,4 @@
-verilog xil_defaultlib "../../../../deps/verilog-axis/rtl/axis_frame_fifo.v" --include "../../../../vivado-projects/APS2-Comms-sims/APS2-Comms-sims.srcs/sources_1/bd/tcp_bridge_tb_bd/ipshared/7e3a/hdl"
+verilog xil_defaultlib "../../../../deps/verilog-axis/rtl/axis_frame_fifo.v" --include "../../../../vivado-projects/APS2-Comms-sim/APS2-Comms-sim.srcs/sources_1/bd/tcp_bridge_tb_bd/ipshared/7e3a/hdl"
 
 verilog xil_defaultlib "glbl.v"
 

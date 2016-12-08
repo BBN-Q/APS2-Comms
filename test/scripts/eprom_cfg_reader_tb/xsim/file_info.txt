@@ -1,2 +1,2 @@
-eprom_cfg_reader.vhd,vhdl,xil_defaultlib,../../../../../../../../APS2-Comms/src/eprom_cfg_reader.vhd,incdir="../../../../vivado-projects/APS2-Comms-sims/APS2-Comms-sims.srcs/sources_1/bd/tcp_bridge_tb_bd/ipshared/7e3a/hdl"
-eprom_cfg_reader_tb.vhd,vhdl,xil_defaultlib,../../../../../../../../APS2-Comms/test/eprom_cfg_reader_tb.vhd,incdir="../../../../vivado-projects/APS2-Comms-sims/APS2-Comms-sims.srcs/sources_1/bd/tcp_bridge_tb_bd/ipshared/7e3a/hdl"
+eprom_cfg_reader.vhd,vhdl,xil_defaultlib,../../../../../../../../APS2-Comms/src/eprom_cfg_reader.vhd,incdir="../../../../vivado-projects/APS2-Comms-sim/APS2-Comms-sim.srcs/sources_1/bd/tcp_bridge_tb_bd/ipshared/7e3a/hdl"
+eprom_cfg_reader_tb.vhd,vhdl,xil_defaultlib,../../../../../../../../APS2-Comms/test/eprom_cfg_reader_tb.vhd,incdir="../../../../vivado-projects/APS2-Comms-sim/APS2-Comms-sim.srcs/sources_1/bd/tcp_bridge_tb_bd/ipshared/7e3a/hdl"
