@@ -1,4 +1,3 @@
-vhdl xpm "/opt/Xilinx/Vivado/2016.1/data/ip/xpm/xpm_VCOMP.vhd" 
 vhdl xil_defaultlib "../../../../src/eprom_cfg_reader.vhd" 
 vhdl xil_defaultlib "../../../eprom_cfg_reader_tb.vhd" 
 
