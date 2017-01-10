@@ -12,67 +12,66 @@ use ieee.numeric_std.all;
 use work.cpld_bridge_pkg.all;
 
 entity ApsMsgProc_wrapper is
-  port (
-    clk : in std_logic;
-    rst : in std_logic;
+	port (
+		clk : in std_logic;
+		rst : in std_logic;
 
-    --RX and TX to TCP comms.
-    rx_tdata  : in std_logic_vector(7 downto 0);
-    rx_tvalid : in std_logic;
-    rx_tready : out std_logic;
-    rx_tlast  : in std_logic;
+		--RX and TX to TCP comms.
+		rx_tdata  : in std_logic_vector(7 downto 0);
+		rx_tvalid : in std_logic;
+		rx_tready : out std_logic;
+		rx_tlast  : in std_logic;
 
-    tx_tdata  : out std_logic_vector(7 downto 0);
-    tx_tvalid : out std_logic;
-    tx_tready : in std_logic;
-    tx_tlast  : out std_logic;
+		tx_tdata  : out std_logic_vector(7 downto 0);
+		tx_tvalid : out std_logic;
+		tx_tready : in std_logic;
+		tx_tlast  : out std_logic;
 
-    -- Config Bus Connections
-    cfg_clk   : in std_logic;	-- 100 MHZ clock from the Config CPLD
-    cfgd      : inout std_logic_vector(15 downto 0);	-- Config Data bus from CPLD
-    fpga_cmdl : out std_logic;	-- Command strobe from FPGA
-    fpga_rdyl : out std_logic;	-- Ready Strobe from FPGA
-    cfg_rdy   : in std_logic;	-- Ready to complete current transfer.	Connected to CFG_RDWR_B
-    cfg_err   : in std_logic;	-- Error during current command.	Connecte to CFG_CSI_B
-    cfg_act   : in std_logic;	-- Current transaction is complete
-    stat_oel  : out std_logic -- Enable CPLD to drive status onto CFGD
-
-  );
+		-- Config Bus Connections
+		cfg_clk   : in std_logic;	-- 100 MHZ clock from the Config CPLD
+		cfgd      : inout std_logic_vector(15 downto 0);	-- Config Data bus from CPLD
+		fpga_cmdl : out std_logic;	-- Command strobe from FPGA
+		fpga_rdyl : out std_logic;	-- Ready Strobe from FPGA
+		cfg_rdy   : in std_logic;	-- Ready to complete current transfer.	Connected to CFG_RDWR_B
+		cfg_err   : in std_logic;	-- Error during current command.	Connecte to CFG_CSI_B
+		cfg_act   : in std_logic;	-- Current transaction is complete
+		stat_oel  : out std_logic -- Enable CPLD to drive status onto CFGD
+	);
 end entity;
 
 architecture arch of ApsMsgProc_wrapper is
 
-  signal rx_framed_tdata : std_logic_vector(7 downto 0) := (others => '0');
-  signal rx_framed_tvalid, rx_framed_tready, rx_framed_tlast : std_logic := '0';
+	signal rx_framed_tdata : std_logic_vector(7 downto 0) := (others => '0');
+	signal rx_framed_tvalid, rx_framed_tready, rx_framed_tlast : std_logic := '0';
 
-  signal rx_frame_status_tvalid, rx_frame_padded, rx_frame_truncated : std_logic;
-  signal rx_frame_length, rx_frame_original_length : unsigned(15 downto 0);
+	signal rx_frame_status_tvalid, rx_frame_padded, rx_frame_truncated : std_logic;
+	signal rx_frame_length, rx_frame_original_length : unsigned(15 downto 0);
 
-  signal rx_msgproc_tdata : std_logic_vector(7 downto 0) := (others => '0');
-  signal rx_msgproc_tvalid, rx_msgproc_tready, rx_msgproc_tlast : std_logic := '0';
+	signal rx_msgproc_tdata : std_logic_vector(7 downto 0) := (others => '0');
+	signal rx_msgproc_tvalid, rx_msgproc_tready, rx_msgproc_tlast : std_logic := '0';
 
-  signal tx_msgproc_tdata : std_logic_vector(7 downto 0) := (others => '0');
-  signal tx_msgproc_tvalid, tx_msgproc_tready, tx_msgproc_tlast : std_logic := '0';
+	signal tx_msgproc_tdata : std_logic_vector(7 downto 0) := (others => '0');
+	signal tx_msgproc_tvalid, tx_msgproc_tready, tx_msgproc_tlast : std_logic := '0';
 
-  type ethernet_frame_header_t is array(0 to 15) of std_logic_vector(7 downto 0);
-  constant ethernet_frame_header : ethernet_frame_header_t := (
-  x"ff", x"ff", x"ff", x"ff", x"ff", x"ff", -- destination MAC address
-  x"ba", x"ad", x"0d", x"db", x"a1", x"11", -- source MAC address
-  x"bb", x"4e", --frame type
-  x"00", x"00" --sequence number
-  );
+	type ethernet_frame_header_t is array(0 to 15) of std_logic_vector(7 downto 0);
+	constant ethernet_frame_header : ethernet_frame_header_t := (
+	x"ff", x"ff", x"ff", x"ff", x"ff", x"ff", -- destination MAC address
+	x"ba", x"ad", x"0d", x"db", x"a1", x"11", -- source MAC address
+	x"bb", x"4e", --frame type
+	x"00", x"00" --sequence number
+	);
 
-  type rx_framer_state_t is (IDLE, WRITE_HEADER, WAIT_FOR_LAST, INTERFRAME_GAP);
-  signal rx_framer_state : rx_framer_state_t;
+	type rx_framer_state_t is (IDLE, WRITE_HEADER, WAIT_FOR_LAST, INTERFRAME_GAP);
+	signal rx_framer_state : rx_framer_state_t;
 
-  signal header_tdata : std_logic_vector(7 downto 0);
+	signal header_tdata : std_logic_vector(7 downto 0);
 
-  type tx_deframer_state_t is (IDLE, STRIP_HEADER, WAIT_FOR_LAST);
-  signal tx_deframer_state : tx_deframer_state_t;
+	type tx_deframer_state_t is (IDLE, STRIP_HEADER, WAIT_FOR_LAST);
+	signal tx_deframer_state : tx_deframer_state_t;
 
-  signal nv_data : std_logic_vector(63 downto 0);
-  signal mac_addr : std_logic_vector(47 downto 0);
-  signal good_toggle, bad_toggle : std_logic;
+	signal nv_data : std_logic_vector(63 downto 0);
+	signal mac_addr : std_logic_vector(47 downto 0);
+	signal good_toggle, bad_toggle : std_logic;
 
 begin
 
@@ -282,64 +281,63 @@ tx_msgproc_tready <= tx_tready when tx_deframer_state = WAIT_FOR_LAST else '1';
 
 msgproc_impl : if in_synthesis generate
   -- This encapsulates all of the packet and message processing
-  AMP1 : ApsMsgProc
-  port map
-  (
-  -- Interface to MAC to get Ethernet packets
-    MAC_CLK       => clk,
-    RESET         => rst,
+	AMP1 : ApsMsgProc
+	port map (
+		-- Interface to MAC to get Ethernet packets
+		MAC_CLK       => clk,
+		RESET         => rst,
 
-    MAC_RXD      => rx_msgproc_tdata,
-  	MAC_RX_VALID => rx_msgproc_tvalid,
-  	MAC_RX_EOP   => rx_msgproc_tlast,
-  	MAC_BAD_FCS	 => '0',
+		MAC_RXD      => rx_msgproc_tdata,
+		MAC_RX_VALID => rx_msgproc_tvalid,
+		MAC_RX_EOP   => rx_msgproc_tlast,
+		MAC_BAD_FCS	 => '0',
 
-  	MAC_TXD       => tx_msgproc_tdata,
-  	MAC_TX_RDY    => tx_msgproc_tready,
-  	MAC_TX_VALID  => tx_msgproc_tvalid,
-  	MAC_TX_EOP    => tx_msgproc_tlast,
+		MAC_TXD       => tx_msgproc_tdata,
+		MAC_TX_RDY    => tx_msgproc_tready,
+		MAC_TX_VALID  => tx_msgproc_tvalid,
+		MAC_TX_EOP    => tx_msgproc_tlast,
 
-    NV_DATA       => open,
-    MAC_ADDRESS   => open,
+		NV_DATA       => open,
+		MAC_ADDRESS   => open,
 
-    -- User Logic Connections
-    USER_CLK     => clk,
-  	USER_RST     => open,
-  	USER_VERSION => x"badda555",
-  	USER_STATUS	 => x"0ddba111",
+		-- User Logic Connections
+		USER_CLK     => clk,
+		USER_RST     => open,
+		USER_VERSION => x"badda555",
+		USER_STATUS	 => x"0ddba111",
 
-  	USER_DIF      => open,
-  	USER_DIF_RD   => '0',
+		USER_DIF      => open,
+		USER_DIF_RD   => '0',
 
-  	USER_CIF_EMPTY => open,
-  	USER_CIF_RD    => '0',
-  	USER_CIF_RW    => open,
-  	USER_CIF_MODE  => open,
-  	USER_CIF_CNT   => open,
-  	USER_CIF_ADDR  => open,
+		USER_CIF_EMPTY => open,
+		USER_CIF_RD    => '0',
+		USER_CIF_RW    => open,
+		USER_CIF_MODE  => open,
+		USER_CIF_CNT   => open,
+		USER_CIF_ADDR  => open,
 
-  	USER_DOF       => (others => '0'),
-  	USER_DOF_WR    => '0',
+		USER_DOF       => (others => '0'),
+		USER_DOF_WR    => '0',
 
-  	USER_COF_STAT	 => (others => '0'),
-  	USER_COF_CNT	 => (others => '0'),
-  	USER_COF_AFULL => open,
-  	USER_COF_WR		 => '0',
+		USER_COF_STAT	 => (others => '0'),
+		USER_COF_CNT	 => (others => '0'),
+		USER_COF_AFULL => open,
+		USER_COF_WR		 => '0',
 
-    -- Config Bus Connections
-    CFG_CLK    => cfg_clk,
-    CFGD       => cfgd,
-    FPGA_CMDL  => fpga_cmdl,
-    FPGA_RDYL  => fpga_rdyl,
-    CFG_RDY    => cfg_rdy,
-    CFG_ERR    => cfg_err,
-    CFG_ACT    => cfg_act,
-    STAT_OEL   => stat_oel,
+		-- Config Bus Connections
+		CFG_CLK    => cfg_clk,
+		CFGD       => cfgd,
+		FPGA_CMDL  => fpga_cmdl,
+		FPGA_RDYL  => fpga_rdyl,
+		CFG_RDY    => cfg_rdy,
+		CFG_ERR    => cfg_err,
+		CFG_ACT    => cfg_act,
+		STAT_OEL   => stat_oel,
 
-    -- Status to top level
-    GOOD_TOGGLE => good_toggle,
-  	BAD_TOGGLE  => bad_toggle
-  );
+		-- Status to top level
+		GOOD_TOGGLE => good_toggle,
+		BAD_TOGGLE  => bad_toggle
+	);
 end generate;
 
 end architecture;
