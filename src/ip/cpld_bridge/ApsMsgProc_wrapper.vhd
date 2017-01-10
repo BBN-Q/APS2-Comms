@@ -3,7 +3,7 @@
 -- * strips header of tx packets
 --
 -- Original author: Colm Ryan
--- Copyright 2015, Raytheon BBN Technologies
+-- Copyright 2015,2016 Raytheon BBN Technologies
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -12,6 +12,9 @@ use ieee.numeric_std.all;
 use work.cpld_bridge_pkg.all;
 
 entity ApsMsgProc_wrapper is
+	generic (
+		BOARD_TYPE : std_logic_vector(7 downto 0) := x"00" -- x"00" for APS; x"01" for TDM
+	);
 	port (
 		clk : in std_logic;
 		rst : in std_logic;
@@ -300,6 +303,8 @@ msgproc_impl : if in_synthesis generate
 		NV_DATA       => open,
 		MAC_ADDRESS   => open,
 
+		BOARD_TYPE    => BOARD_TYPE,
+		
 		-- User Logic Connections
 		USER_CLK     => clk,
 		USER_RST     => open,

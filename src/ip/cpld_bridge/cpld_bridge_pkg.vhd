@@ -105,6 +105,8 @@ package CPLD_bridge_pkg is
 		  NV_DATA       : out std_logic_vector(63 downto 0);  -- NV Data from Multicast Address Words
 		  MAC_ADDRESS   : out std_logic_vector(47 downto 0);  -- MAC Address from EPROM
 
+			BOARD_TYPE    : in std_logic_vector(7 downto 0); -- x"00" for APS2 and x"01" for TDM
+
 		  -- User Logic Connections
 		  USER_CLK       : in std_logic;                      -- Clock for User side of FIFO interface
 		  USER_RST       : out std_logic;                     -- User Logic global reset, synchronous to USER_CLK
