@@ -29,6 +29,8 @@ set_property "simulator_language" "Mixed" [current_project]
 set_property "target_language" "VHDL" [current_project]
 
 # load all HDL files
+source $REPO_PATH/scripts/add_verilog_deps.tcl
+source $REPO_PATH/scripts/add_comblocks_files.tcl
 source $REPO_PATH/scripts/add_files_to_project.tcl
 
 # Block designs
