@@ -3,13 +3,19 @@
 set APS2_COMMS_SCRIPT_PATH [file normalize [info script]]
 set APS2_COMMS_REPO_PATH [file dirname $APS2_COMMS_SCRIPT_PATH]/../
 
+# on linux, expect python3k to be called "python3"
+if { $tcl_platform(platform) == "unix"} {
+	set python_cmd python3
+} else {
+	set python_cmd python
+}
 
 # create dependency outputs
 set cur_dir [pwd]
 cd $APS2_COMMS_REPO_PATH/deps/verilog-axis/rtl
-exec python3 axis_mux.py --ports=3 --output=axis_mux_3.v
-exec python3 axis_arb_mux.py --ports=3 --output=axis_arb_mux_3.v
-exec python3 axis_demux.py --ports=2 --output=axis_demux_2.v
+exec $python_cmd axis_mux.py --ports=3 --output=axis_mux_3.v
+exec $python_cmd axis_arb_mux.py --ports=3 --output=axis_arb_mux_3.v
+exec $python_cmd axis_demux.py --ports=2 --output=axis_demux_2.v
 
 # patch demux because select is keyword in VHDL
 set fp [open axis_demux_2.v r]
