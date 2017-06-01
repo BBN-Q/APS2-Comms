@@ -16,7 +16,7 @@ if { $tcl_platform(platform) == "windows"} {
 }
 # ignore whitespace warnings - seems a little dangerous
 exec -ignorestderr $git_cmd apply --directory=deps/ComBlock/5402 com5402_dhcp.patch
-file copy -force com5402.backup com5402.vhd
+file rename -force com5402.backup com5402.vhd
 cd $cur_dir
 
 add_files -norecurse \
